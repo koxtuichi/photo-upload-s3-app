@@ -1,0 +1,139 @@
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuthContext } from "@/providers/AuthProvider";
+
+const Header: React.FC = () => {
+  const { user, logout } = useAuthContext();
+  const router = useRouter();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push("/auth");
+    } catch (error) {
+      console.error("ログアウトエラー:", error);
+    }
+  };
+
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+  };
+
+  return (
+    <header className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-10">
+      <div className="container mx-auto px-4">
+        <div className="flex justify-between items-center h-16">
+          {/* ロゴ / アプリ名 */}
+          <div className="flex-shrink-0">
+            <Link href="/" className="text-xl font-bold text-blue-500">
+              Photo App
+            </Link>
+          </div>
+
+          {/* ナビゲーションメニュー (デスクトップ) */}
+          <nav className="hidden md:flex items-center space-x-4">
+            {user && (
+              <>
+                <Link
+                  href="/settings"
+                  className="text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400"
+                >
+                  設定
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400"
+                >
+                  ログアウト
+                </button>
+              </>
+            )}
+            {!user && (
+              <Link
+                href="/auth"
+                className="text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400"
+              >
+                ログイン
+              </Link>
+            )}
+          </nav>
+
+          {/* モバイルメニューボタン */}
+          <div className="md:hidden">
+            <button
+              onClick={toggleMenu}
+              className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                {isMenuOpen ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* モバイルメニュー */}
+      {isMenuOpen && (
+        <div className="md:hidden bg-white dark:bg-gray-800 shadow-lg">
+          <div className="container mx-auto px-4 py-3 space-y-2">
+            {user && (
+              <>
+                <Link
+                  href="/settings"
+                  className="block py-2 text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  設定
+                </Link>
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setIsMenuOpen(false);
+                  }}
+                  className="block w-full text-left py-2 text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400"
+                >
+                  ログアウト
+                </button>
+              </>
+            )}
+            {!user && (
+              <Link
+                href="/auth"
+                className="block py-2 text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                ログイン
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+    </header>
+  );
+};
+
+export default Header;

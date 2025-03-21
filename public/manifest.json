@@ -1,0 +1,17 @@
+{
+  "name": "Photo Upload S3 App",
+  "short_name": "Photo App",
+  "description": "写真をAWS S3に保存して閲覧できるアプリケーション",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/next.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
