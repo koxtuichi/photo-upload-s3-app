@@ -150,8 +150,61 @@ export function getDirectoryFromFileType(fileName: string): string {
  */
 export const getPhotoTakenDate = async (file: File): Promise<Date | null> => {
   try {
-    // 画像ファイル以外はnullを返す
-    if (!file.type.startsWith("image/")) {
+    // ファイルの拡張子を取得
+    const extension = file.name.split(".").pop()?.toLowerCase() || "";
+
+    // RAW形式のファイルや非画像ファイルの場合はEXIF読み取りをスキップ
+    const rawExtensions = [
+      "raw",
+      "arw",
+      "cr2",
+      "cr3",
+      "nef",
+      "nrw",
+      "orf",
+      "rw2",
+      "pef",
+      "dng",
+      "raf",
+      "sr2",
+      "3fr",
+      "ari",
+      "bay",
+      "braw",
+      "cap",
+      "ce1",
+      "ce2",
+      "cib",
+      "craw",
+      "crw",
+      "dcr",
+      "dcs",
+      "drf",
+      "eip",
+      "erf",
+      "fff",
+      "gpr",
+      "iiq",
+      "k25",
+      "kc2",
+      "kdc",
+      "mdc",
+      "mef",
+      "mos",
+      "mrw",
+      "nex",
+      "ptx",
+      "pxn",
+      "r3d",
+      "ra2",
+      "rwl",
+      "srw",
+      "x3f",
+    ];
+
+    // RAW形式またはimage/で始まらないContent-Typeの場合はnullを返す
+    if (rawExtensions.includes(extension) || !file.type.startsWith("image/")) {
+      console.log(`EXIF読み取りをスキップ: ${file.name} (${file.type})`);
       return null;
     }
 
