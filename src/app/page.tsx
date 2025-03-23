@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useAuthContext } from "@/providers/AuthProvider";
 import { usePhotoStore } from "@/store/photoStore";
-import Header from "@/components/Header";
-import PhotoCard from "@/components/PhotoCard";
 import UploadProgress from "@/components/UploadProgress";
 import PhotoPreview from "@/components/PhotoPreview";
+import FileBrowser from "@/components/FileBrowser";
 
 // AWS認証情報のチェック
 const isAwsConfigured =
@@ -20,17 +19,20 @@ const isAwsConfigured =
 export default function Home() {
   const router = useRouter();
   const { user, loading } = useAuthContext();
-  const { photos, isLoading, error, fetchUserPhotos, uploadPhoto } =
-    usePhotoStore();
+  const { error, uploadPhoto } = usePhotoStore();
 
   // 選択した写真ファイルの配列
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   // アップロード中のファイル
-  const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<
+    (File & { fileId: string; fileName: string })[]
+  >([]);
   // アップロード進捗
   const [uploadProgress, setUploadProgress] = useState<{
     [key: string]: number;
   }>({});
+  // ファイルブラウザのキー（アップロード後に更新する）
+  const [fileBrowserKey, setFileBrowserKey] = useState<number>(0);
 
   // 認証状態をチェック
   useEffect(() => {
@@ -39,17 +41,19 @@ export default function Home() {
     }
   }, [user, loading, router]);
 
-  // ユーザーの写真をロード
-  useEffect(() => {
-    if (user?.uid) {
-      fetchUserPhotos(user.uid);
-    }
-  }, [user, fetchUserPhotos]);
-
   // ドラッグアンドドロップ用の設定
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       "image/*": [".jpeg", ".jpg", ".png", ".gif", ".webp"],
+      "application/octet-stream": [
+        ".pef",
+        ".raw",
+        ".arw",
+        ".cr2",
+        ".nef",
+        ".orf",
+        ".rw2",
+      ],
     },
     onDrop: (acceptedFiles) => {
       // 選択したファイルをプレビュー用の状態に追加
@@ -66,52 +70,76 @@ export default function Home() {
   const handleUploadFiles = async () => {
     if (!user?.uid || selectedFiles.length === 0) return;
 
-    const filesToUpload = [...selectedFiles];
-    setUploadingFiles(filesToUpload);
+    // ファイルとIDのマッピングを作成
+    const filesToUpload = selectedFiles.map((file, index) => {
+      // 固定されたユニークIDを作成 (現在時刻はファイルアップロード開始時に一度だけ取得)
+      const timestamp = Date.now();
+      const fileId = `file-${index}-${timestamp}`;
+      // ファイル名を明示的に保存
+      return { file, fileId, fileName: file.name };
+    });
+
+    // ファイル配列をセット（fileIdとfileNameを含める）
+    setUploadingFiles(
+      filesToUpload.map((item) => ({
+        ...item.file,
+        fileId: item.fileId,
+        fileName: item.fileName, // ファイル名を明示的に保存
+      })) as (File & { fileId: string; fileName: string })[]
+    );
 
     // アップロード開始前にプレビューから削除
     setSelectedFiles([]);
 
+    // 進捗表示の初期化
+    const initialProgress = filesToUpload.reduce((acc, { fileId }) => {
+      acc[fileId] = 1; // 1%から開始
+      return acc;
+    }, {} as Record<string, number>);
+    setUploadProgress(initialProgress);
+
+    // アップロード完了カウンター
+    let completedFiles = 0;
+
     // 各ファイルを個別にアップロード
-    for (const file of filesToUpload) {
+    for (const [index, { file, fileId }] of filesToUpload.entries()) {
       try {
-        // アップロードの進行状況をシミュレート（実際の進行状況を取得する方法がない場合）
-        const fileId = `${file.name}-${Date.now()}`;
-        const simulateProgress = () => {
-          let progress = 0;
-          const interval = setInterval(() => {
-            progress += Math.floor(Math.random() * 10) + 5;
-            if (progress >= 100) {
-              progress = 100;
-              clearInterval(interval);
-            }
-            setUploadProgress((prev) => ({ ...prev, [fileId]: progress }));
-          }, 300);
-          return interval;
-        };
+        console.log(
+          `アップロード開始: ${fileId} (${index + 1}/${filesToUpload.length})`
+        );
 
-        const progressInterval = simulateProgress();
+        // 実際のアップロード処理（進捗コールバック付き）
+        await uploadPhoto(user.uid, file, (progress) => {
+          console.log(`進捗更新: ${fileId} -> ${progress}%`);
+          // 進捗状況を更新
+          setUploadProgress((prev) => ({ ...prev, [fileId]: progress }));
+        });
 
-        // 実際のアップロード処理
-        await uploadPhoto(user.uid, file);
+        // アップロード完了をカウント
+        completedFiles++;
 
-        // 完了したらアップロードのインターバルをクリア
-        clearInterval(progressInterval);
-        setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }));
-
-        // アップロード完了後に進行状況をリストから削除
+        // アップロード完了後、少し待ってから進行状況をリストから削除
         setTimeout(() => {
-          setUploadingFiles((prev) => prev.filter((f) => f !== file));
+          setUploadingFiles((prev) =>
+            prev.filter((f) => "fileId" in f && f.fileId !== fileId)
+          );
           setUploadProgress((prev) => {
             const newProgress = { ...prev };
             delete newProgress[fileId];
             return newProgress;
           });
         }, 1000);
+
+        console.log(
+          `アップロード完了: ${fileId} (${completedFiles}/${filesToUpload.length})`
+        );
       } catch (error) {
-        console.error("アップロードエラー:", error);
+        console.error("アップロードエラー:", error, fileId);
       }
     }
+
+    // ファイルブラウザを更新（キーを変更して強制的に再レンダリング）
+    setFileBrowserKey((prev) => prev + 1);
   };
 
   // ファイル入力からのアップロードハンドラー
@@ -141,8 +169,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen">
-      <Header />
-
       <div className="container mx-auto px-4 py-8">
         {/* AWS認証情報の警告 */}
         {!isAwsConfigured && (
@@ -206,19 +232,28 @@ export default function Home() {
           </div>
         )}
 
-        {/* アップロード進捗状況の表示 */}
+        {/* アップロード中ファイルの進捗表示 */}
         {uploadingFiles.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">アップロード中</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              アップロード中 ({uploadingFiles.length}ファイル)
+            </h2>
             <div className="space-y-2">
               {uploadingFiles.map((file, index) => {
-                const fileId = `${file.name}-${Date.now()}`;
-                const progress = uploadProgress[fileId] || 0;
+                // fileIdを直接使用（ファイルオブジェクトに保存されています）
+                const fileId = file.fileId;
+
+                // fileIdがuploadProgressに存在するか確認
+                if (!fileId || !(fileId in uploadProgress)) {
+                  console.log("進捗情報なし:", file.name, fileId);
+                  return null;
+                }
+
                 return (
                   <UploadProgress
-                    key={index}
-                    fileName={file.name}
-                    progress={progress}
+                    key={fileId}
+                    fileName={file.fileName || file.name} // ファイル名を使用（バックアップとして両方チェック）
+                    progress={Number(uploadProgress[fileId]) || 0}
                   />
                 );
               })}
@@ -233,26 +268,11 @@ export default function Home() {
           </div>
         )}
 
-        {/* 写真一覧 */}
-        <h1 className="text-2xl font-bold mb-6">マイフォト</h1>
-
-        {isLoading && photos.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="loader">写真を読み込み中...</div>
-          </div>
-        ) : photos.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500 dark:text-gray-400">
-              写真がありません。写真をアップロードしてください。
-            </p>
-          </div>
-        ) : (
-          <div className="photo-grid">
-            {photos.map((photo, index) => (
-              <PhotoCard key={photo.key} photo={photo} userId={user.uid} />
-            ))}
-          </div>
-        )}
+        {/* ファイルブラウザ */}
+        <div className="mt-8 bg-white dark:bg-gray-900 rounded-lg shadow-md p-4">
+          <h2 className="text-2xl font-bold mb-6">ファイルブラウザ</h2>
+          <FileBrowser key={fileBrowserKey} userId={user.uid} />
+        </div>
       </div>
     </main>
   );
