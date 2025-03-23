@@ -306,8 +306,27 @@ export const generateS3PathFromDate = async (
     fileType = "raw";
   }
 
-  // 撮影日がなければ現在の日付を使用
-  const date = takenDate || new Date();
+  // 日付の優先順位:
+  // 1. EXIF撮影日 (takenDate)
+  // 2. ファイルの最終更新日 (file.lastModified)
+  // 3. 現在の日付 (fallback)
+  let date: Date;
+
+  if (takenDate) {
+    // 1. EXIF撮影日がある場合
+    date = takenDate;
+    console.log(`${file.name}: EXIF撮影日を使用 (${date.toISOString()})`);
+  } else if (file.lastModified) {
+    // 2. ファイルの最終更新日を使用
+    date = new Date(file.lastModified);
+    console.log(
+      `${file.name}: ファイル最終更新日を使用 (${date.toISOString()})`
+    );
+  } else {
+    // 3. どちらもなければ現在の日付
+    date = new Date();
+    console.log(`${file.name}: 現在の日付を使用 (${date.toISOString()})`);
+  }
 
   // YYYY/MM/DD 形式に整形
   const year = date.getFullYear();
