@@ -3,8 +3,12 @@
 
 const nextConfig = {
   /* config options here */
+  output: "export", // 静的HTMLとJSファイルを出力
+  distDir: "out", // 出力先ディレクトリ
+  trailingSlash: true, // 末尾のスラッシュを追加（静的ビルドのためのパス解決改善）
   images: {
     domains: ["photo-upload-s3-app.s3.ap-northeast-1.amazonaws.com"],
+    unoptimized: true, // 静的エクスポートではimages最適化を無効にする必要あり
     // または以下のようにremotePatternsを使用することもできます
     // remotePatterns: [
     //   {
