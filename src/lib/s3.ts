@@ -82,8 +82,55 @@ export function getDirectoryFromFileType(fileName: string): string {
     return ext === "jpeg" ? "jpg" : ext;
   }
 
-  // RAW形式
-  if (["raw", "arw", "cr2", "nef", "orf", "rw2", "pef"].includes(ext)) {
+  // RAW形式 - 幅広いカメラメーカーに対応
+  const rawExtensions = [
+    "raw",
+    "arw",
+    "cr2",
+    "cr3",
+    "nef",
+    "nrw",
+    "orf",
+    "rw2",
+    "pef",
+    "dng",
+    "raf",
+    "sr2",
+    "3fr",
+    "ari",
+    "bay",
+    "braw",
+    "cap",
+    "ce1",
+    "ce2",
+    "cib",
+    "craw",
+    "crw",
+    "dcr",
+    "dcs",
+    "drf",
+    "eip",
+    "erf",
+    "fff",
+    "gpr",
+    "iiq",
+    "k25",
+    "kc2",
+    "kdc",
+    "mdc",
+    "mef",
+    "mos",
+    "mrw",
+    "nex",
+    "ptx",
+    "pxn",
+    "r3d",
+    "ra2",
+    "rwl",
+    "srw",
+    "x3f",
+  ];
+  if (rawExtensions.includes(ext)) {
     return "raw";
   }
 
@@ -198,7 +245,11 @@ export const generateS3PathFromDate = async (
   let fileType = "other";
   if (/^(jpg|jpeg)$/i.test(extension)) {
     fileType = "jpg";
-  } else if (/^(raw|arw|cr2|nef|orf|rw2|pef)$/i.test(extension)) {
+  } else if (
+    /^(raw|arw|cr2|cr3|nef|nrw|orf|rw2|pef|dng|raf|sr2|3fr|ari|bay|braw|cap|ce1|ce2|cib|craw|crw|dcr|dcs|drf|eip|erf|fff|gpr|iiq|k25|kc2|kdc|mdc|mef|mos|mrw|nex|ptx|pxn|r3d|ra2|rwl|srw|x3f)$/i.test(
+      extension
+    )
+  ) {
     fileType = "raw";
   }
 
