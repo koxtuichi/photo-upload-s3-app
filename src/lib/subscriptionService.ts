@@ -1,6 +1,7 @@
 import { User } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
+import { S3ClientAPI } from "./s3";
 
 // サブスクリプションプラン
 export enum SubscriptionPlan {
@@ -81,6 +82,35 @@ export async function updateStorageUsed(
     });
   } catch (error) {
     console.error("ストレージ使用量更新エラー:", error);
+    throw error;
+  }
+}
+
+// ストレージ使用量を再計算して更新する
+export async function recalculateStorageUsage(userId: string): Promise<number> {
+  try {
+    // S3からユーザーのファイル一覧を取得
+    const files = await S3ClientAPI.listUserFiles(userId);
+
+    // 合計サイズを計算
+    let totalSize = 0;
+    for (const file of files) {
+      if (file.Size) {
+        totalSize += file.Size;
+      }
+    }
+
+    // ユーザードキュメントの参照を取得
+    const userDocRef = doc(db, "users", userId);
+
+    // ストレージ使用量を更新
+    await updateDoc(userDocRef, {
+      "plan.storageUsed": totalSize,
+    });
+
+    return totalSize;
+  } catch (error) {
+    console.error("ストレージ使用量の再計算エラー:", error);
     throw error;
   }
 }

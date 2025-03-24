@@ -9,6 +9,7 @@ import {
   getUserPlan,
   createCheckoutSession,
   UserPlan,
+  recalculateStorageUsage,
 } from "@/lib/subscriptionService";
 
 function SubscriptionContent() {
@@ -45,8 +46,22 @@ function SubscriptionContent() {
     async function fetchUserPlan() {
       if (user?.uid) {
         try {
+          // ユーザープラン情報の取得
           const plan = await getUserPlan(user.uid);
-          setUserPlan(plan);
+
+          // ストレージ使用量を再計算
+          try {
+            const updatedStorageUsed = await recalculateStorageUsage(user.uid);
+            // 再計算後の値を含むプラン情報を設定
+            setUserPlan({
+              ...plan,
+              storageUsed: updatedStorageUsed,
+            });
+          } catch (storageError) {
+            console.error("ストレージ使用量の再計算エラー:", storageError);
+            // エラー時は元のプラン情報を使用
+            setUserPlan(plan);
+          }
         } catch (error) {
           console.error("プラン取得エラー:", error);
         }

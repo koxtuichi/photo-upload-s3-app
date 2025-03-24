@@ -48,8 +48,22 @@ const Header: React.FC = () => {
                   ホーム
                 </Link>
                 <Link
+                  href="/settings/subscription"
+                  className={`text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400 ${
+                    pathname === "/settings/subscription"
+                      ? "text-blue-500 dark:text-blue-400"
+                      : ""
+                  }`}
+                >
+                  サブスクリプション
+                </Link>
+                <Link
                   href="/settings"
-                  className="text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400"
+                  className={`text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400 ${
+                    pathname === "/settings"
+                      ? "text-blue-500 dark:text-blue-400"
+                      : ""
+                  }`}
                 >
                   設定
                 </Link>
@@ -119,6 +133,17 @@ const Header: React.FC = () => {
                   onClick={() => setIsMenuOpen(false)}
                 >
                   ホーム
+                </Link>
+                <Link
+                  href="/settings/subscription"
+                  className={`block py-2 text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 ${
+                    pathname === "/settings/subscription"
+                      ? "text-blue-500 dark:text-blue-400"
+                      : ""
+                  }`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  サブスクリプション
                 </Link>
                 <Link
                   href="/settings"
