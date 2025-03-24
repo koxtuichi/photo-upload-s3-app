@@ -7,6 +7,7 @@ import {
   deleteFileFromS3,
 } from "@/lib/s3";
 import { Tag } from "./tagStore";
+import { updateStorageUsed } from "@/lib/subscriptionService";
 
 export interface PhotoItem {
   key: string;
@@ -136,7 +137,21 @@ export const usePhotoStore = create<PhotoStore>()(
       deletePhoto: async (key: string) => {
         set({ isLoading: true, error: null });
         try {
+          // 削除前に写真のサイズを記録
+          const photoToDelete = get().photos.find((photo) => photo.key === key);
+          const fileSize = photoToDelete?.size || 0;
+
+          // S3から削除
           await deleteFileFromS3(key);
+
+          // 削除に成功したらストレージ使用量を減らす
+          // keyからユーザーIDを抽出（形式: users/USER_ID/...）
+          const userId = key.split("/")[1];
+          if (userId && fileSize > 0) {
+            // 負の値を渡してストレージ使用量を減らす
+            await updateStorageUsed(userId, -fileSize);
+          }
+
           set((state) => ({
             photos: state.photos.filter((photo) => photo.key !== key),
             isLoading: false,

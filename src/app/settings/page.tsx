@@ -135,199 +135,235 @@ export default function SettingsPage() {
   }
 
   return (
-    <>
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">アカウント設定</h1>
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">アカウント設定</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* プロフィール設定 */}
-          <div className="card p-6">
-            <h2 className="text-xl font-semibold mb-4">プロフィール設定</h2>
-
-            {profileError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {profileError}
-              </div>
-            )}
-
-            {profileSuccess && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                プロフィールが更新されました
-              </div>
-            )}
-
-            <form onSubmit={handleProfileUpdate}>
-              <div className="mb-4">
-                <label
-                  htmlFor="displayName"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  名前
-                </label>
-                <input
-                  id="displayName"
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className="input-field text-gray-900 dark:text-gray-900"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn-primary w-full"
-                disabled={profileSubmitting}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* ナビゲーション */}
+        <div className="col-span-1">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+            <h2 className="text-xl font-semibold mb-4">メニュー</h2>
+            <nav className="flex flex-col space-y-2">
+              <a
+                href="#profile"
+                className="px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
               >
-                {profileSubmitting ? "更新中..." : "プロフィールを更新"}
-              </button>
-            </form>
+                プロフィール設定
+              </a>
+              <a
+                href="#email"
+                className="px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                メールアドレス変更
+              </a>
+              <a
+                href="#password"
+                className="px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                パスワード変更
+              </a>
+              <a
+                href="/settings/subscription"
+                className="px-4 py-2 rounded bg-blue-50 text-blue-600 dark:bg-blue-900 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-800"
+              >
+                サブスクリプション設定
+              </a>
+            </nav>
           </div>
+        </div>
 
-          {/* メールアドレス設定 */}
-          <div className="card p-6">
-            <h2 className="text-xl font-semibold mb-4">メールアドレス設定</h2>
+        {/* 設定フォーム */}
+        <div className="col-span-1 md:col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* プロフィール設定 */}
+            <div className="card p-6">
+              <h2 className="text-xl font-semibold mb-4">プロフィール設定</h2>
 
-            {emailError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {emailError}
-              </div>
-            )}
+              {profileError && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                  {profileError}
+                </div>
+              )}
 
-            {emailSuccess && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                メールアドレスが更新されました
-              </div>
-            )}
+              {profileSuccess && (
+                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                  プロフィールが更新されました
+                </div>
+              )}
 
-            <form onSubmit={handleEmailUpdate}>
-              <div className="mb-4">
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              <form onSubmit={handleProfileUpdate}>
+                <div className="mb-4">
+                  <label
+                    htmlFor="displayName"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    名前
+                  </label>
+                  <input
+                    id="displayName"
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="input-field text-gray-900 dark:text-gray-900"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn-primary w-full"
+                  disabled={profileSubmitting}
                 >
-                  メールアドレス
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input-field text-gray-900 dark:text-gray-900"
-                  required
-                />
-              </div>
+                  {profileSubmitting ? "更新中..." : "プロフィールを更新"}
+                </button>
+              </form>
+            </div>
 
-              <div className="mb-4">
-                <label
-                  htmlFor="currentPassword"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            {/* メールアドレス設定 */}
+            <div className="card p-6">
+              <h2 className="text-xl font-semibold mb-4">メールアドレス設定</h2>
+
+              {emailError && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                  {emailError}
+                </div>
+              )}
+
+              {emailSuccess && (
+                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                  メールアドレスが更新されました
+                </div>
+              )}
+
+              <form onSubmit={handleEmailUpdate}>
+                <div className="mb-4">
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    メールアドレス
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="input-field text-gray-900 dark:text-gray-900"
+                    required
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label
+                    htmlFor="currentPassword"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    現在のパスワード
+                  </label>
+                  <input
+                    id="currentPassword"
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="input-field text-gray-900 dark:text-gray-900"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn-primary w-full"
+                  disabled={emailSubmitting}
                 >
-                  現在のパスワード
-                </label>
-                <input
-                  id="currentPassword"
-                  type="password"
-                  autoComplete="current-password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="input-field text-gray-900 dark:text-gray-900"
-                  required
-                />
-              </div>
+                  {emailSubmitting ? "更新中..." : "メールアドレスを更新"}
+                </button>
+              </form>
+            </div>
 
-              <button
-                type="submit"
-                className="btn-primary w-full"
-                disabled={emailSubmitting}
-              >
-                {emailSubmitting ? "更新中..." : "メールアドレスを更新"}
-              </button>
-            </form>
-          </div>
+            {/* パスワード設定 */}
+            <div className="card p-6">
+              <h2 className="text-xl font-semibold mb-4">パスワード設定</h2>
 
-          {/* パスワード設定 */}
-          <div className="card p-6">
-            <h2 className="text-xl font-semibold mb-4">パスワード設定</h2>
+              {passwordError && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                  {passwordError}
+                </div>
+              )}
 
-            {passwordError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {passwordError}
-              </div>
-            )}
+              {passwordSuccess && (
+                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                  パスワードが更新されました
+                </div>
+              )}
 
-            {passwordSuccess && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                パスワードが更新されました
-              </div>
-            )}
+              <form onSubmit={handlePasswordUpdate}>
+                <div className="mb-4">
+                  <label
+                    htmlFor="currentPasswordForPw"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    現在のパスワード
+                  </label>
+                  <input
+                    id="currentPasswordForPw"
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPasswordForPw}
+                    onChange={(e) => setCurrentPasswordForPw(e.target.value)}
+                    className="input-field text-gray-900 dark:text-gray-900"
+                    required
+                  />
+                </div>
 
-            <form onSubmit={handlePasswordUpdate}>
-              <div className="mb-4">
-                <label
-                  htmlFor="currentPasswordForPw"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                <div className="mb-4">
+                  <label
+                    htmlFor="newPassword"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    新しいパスワード
+                  </label>
+                  <input
+                    id="newPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="input-field text-gray-900 dark:text-gray-900"
+                    required
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    新しいパスワード（確認）
+                  </label>
+                  <input
+                    id="confirmPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="input-field text-gray-900 dark:text-gray-900"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn-primary w-full"
+                  disabled={passwordSubmitting}
                 >
-                  現在のパスワード
-                </label>
-                <input
-                  id="currentPasswordForPw"
-                  type="password"
-                  autoComplete="current-password"
-                  value={currentPasswordForPw}
-                  onChange={(e) => setCurrentPasswordForPw(e.target.value)}
-                  className="input-field text-gray-900 dark:text-gray-900"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label
-                  htmlFor="newPassword"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  新しいパスワード
-                </label>
-                <input
-                  id="newPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="input-field text-gray-900 dark:text-gray-900"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  新しいパスワード（確認）
-                </label>
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="input-field text-gray-900 dark:text-gray-900"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn-primary w-full"
-                disabled={passwordSubmitting}
-              >
-                {passwordSubmitting ? "更新中..." : "パスワードを更新"}
-              </button>
-            </form>
+                  {passwordSubmitting ? "更新中..." : "パスワードを更新"}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

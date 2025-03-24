@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // Firebaseの設定情報
 const firebaseConfig = {
@@ -25,4 +26,7 @@ if (typeof window !== "undefined") {
 // 認証インスタンスの取得
 const auth = getAuth(app);
 
-export { app, auth, analytics };
+// Firestoreインスタンスの取得
+const db = getFirestore(app);
+
+export { app, auth, analytics, db };
