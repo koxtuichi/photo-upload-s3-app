@@ -16,7 +16,7 @@ export const PLAN_DETAILS = {
     name: "無料プラン",
     price: 0,
     storageLimit: 2 * 1024 * 1024 * 1024, // 2GB
-    description: "基本機能のみ",
+    description: "2GBまでのストレージ",
   },
   [SubscriptionPlan.STANDARD]: {
     name: "スタンダードプラン",

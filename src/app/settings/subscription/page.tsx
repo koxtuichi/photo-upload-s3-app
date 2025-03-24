@@ -173,12 +173,6 @@ function SubscriptionContent() {
             <p className="mb-4">
               {PLAN_DETAILS[SubscriptionPlan.FREE].description}
             </p>
-            <p className="text-sm mb-4">
-              ストレージ:{" "}
-              {formatStorageSize(
-                PLAN_DETAILS[SubscriptionPlan.FREE].storageLimit
-              )}
-            </p>
 
             <button
               onClick={() => handlePlanChange(SubscriptionPlan.FREE)}
@@ -215,12 +209,6 @@ function SubscriptionContent() {
             </p>
             <p className="mb-4">
               {PLAN_DETAILS[SubscriptionPlan.STANDARD].description}
-            </p>
-            <p className="text-sm mb-4">
-              ストレージ:{" "}
-              {formatStorageSize(
-                PLAN_DETAILS[SubscriptionPlan.STANDARD].storageLimit
-              )}
             </p>
 
             <button
@@ -259,7 +247,6 @@ function SubscriptionContent() {
             <p className="mb-4">
               {PLAN_DETAILS[SubscriptionPlan.UNLIMITED].description}
             </p>
-            <p className="text-sm mb-4">ストレージ: 無制限</p>
 
             <button
               onClick={() => handlePlanChange(SubscriptionPlan.UNLIMITED)}
