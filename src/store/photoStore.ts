@@ -7,7 +7,10 @@ import {
   deleteFileFromS3,
 } from "@/lib/s3";
 import { Tag } from "./tagStore";
-import { updateStorageUsed } from "@/lib/subscriptionService";
+import {
+  updateStorageUsed,
+  checkStorageLimit,
+} from "@/lib/subscriptionService";
 
 export interface PhotoItem {
   key: string;
@@ -109,9 +112,20 @@ export const usePhotoStore = create<PhotoStore>()(
       ) => {
         set({ isLoading: true, error: null });
         try {
+          // ストレージ制限のチェック
+          const hasEnoughStorage = await checkStorageLimit(userId, file.size);
+          if (!hasEnoughStorage) {
+            throw new Error(
+              "ストレージ容量が不足しています。プランをアップグレードしてください。"
+            );
+          }
+
           // 新しいuploadFile関数を使用
           const { key, url } = await uploadFile(file, userId, onProgress);
           const fileName = file.name;
+
+          // ストレージ使用量の更新
+          await updateStorageUsed(userId, file.size);
 
           // アップロードした写真を追加
           const newPhoto: PhotoItem = {
@@ -130,6 +144,7 @@ export const usePhotoStore = create<PhotoStore>()(
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           console.error("写真のアップロードエラー:", error);
+          throw error; // エラーを伝播させる
         }
       },
 

@@ -8,6 +8,7 @@ import { usePhotoStore } from "@/store/photoStore";
 import UploadProgress from "@/components/UploadProgress";
 import PhotoPreview from "@/components/PhotoPreview";
 import FileBrowser from "@/components/FileBrowser";
+import { toast } from "react-hot-toast";
 
 // AWS認証情報のチェック
 const isAwsConfigured =
@@ -151,8 +152,25 @@ export default function Home() {
         console.log(
           `アップロード完了: ${fileId} (${completedFiles}/${filesToUpload.length})`
         );
-      } catch (error) {
+      } catch (error: any) {
         console.error("アップロードエラー:", error, fileId);
+
+        // エラーメッセージを表示
+        toast.error(error.message || "アップロードに失敗しました");
+
+        // エラーが発生したファイルの進捗状況をリセット
+        setUploadProgress((prev) => {
+          const newProgress = { ...prev };
+          delete newProgress[fileId];
+          return newProgress;
+        });
+
+        // エラーが発生したファイルをリストから削除
+        setTimeout(() => {
+          setUploadingFiles((prev) =>
+            prev.filter((f) => "fileId" in f && f.fileId !== fileId)
+          );
+        }, 1000);
       }
     }
 
