@@ -15,7 +15,7 @@ export const PLAN_DETAILS = {
   [SubscriptionPlan.FREE]: {
     name: "無料プラン",
     price: 0,
-    storageLimit: 5 * 1024 * 1024 * 1024, // 5GB
+    storageLimit: 2 * 1024 * 1024 * 1024, // 2GB
     description: "基本機能のみ",
   },
   [SubscriptionPlan.STANDARD]: {
@@ -121,8 +121,14 @@ export async function checkStorageLimit(
   fileSize: number
 ): Promise<boolean> {
   const userPlan = await getUserPlan(userId);
-  const planDetails = PLAN_DETAILS[userPlan.planId];
 
+  // 無制限プランの場合は常にtrue
+  if (userPlan.planId === SubscriptionPlan.UNLIMITED) {
+    return true;
+  }
+
+  // それ以外のプランでは、現在の使用量+ファイルサイズが制限以下かチェック
+  const planDetails = PLAN_DETAILS[userPlan.planId];
   return userPlan.storageUsed + fileSize <= planDetails.storageLimit;
 }
 
