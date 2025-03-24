@@ -31,7 +31,7 @@ const Header: React.FC = () => {
           {/* ロゴ / アプリ名 */}
           <div className="flex-shrink-0">
             <Link href="/" className="text-xl font-bold text-blue-500">
-              SnapVault
+              SnapStock
             </Link>
           </div>
 

@@ -14,7 +14,7 @@ export default function PrivacyPolicyPage() {
         <section>
           <h2 className="text-xl font-semibold mb-4">1. はじめに</h2>
           <p>
-            SnapVault（以下「当サービス」）は、ユーザーの個人情報の取扱いについて以下のとおりプライバシーポリシーを定めます。
+            SnapStock（以下「当サービス」）は、ユーザーの個人情報の取扱いについて以下のとおりプライバシーポリシーを定めます。
           </p>
         </section>
 

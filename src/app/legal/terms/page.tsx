@@ -12,7 +12,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-xl font-semibold mb-4">1. はじめに</h2>
           <p>
-            本利用規約（以下「本規約」）は、SnapVault（以下「当サービス」）が提供する写真保存サービス「SnapVault」の利用条件を定めるものです。ユーザーは本サービスを利用することにより、本規約に同意したものとみなされます。
+            本利用規約（以下「本規約」）は、SnapStock（以下「当サービス」）が提供する写真保存サービス「SnapStock」の利用条件を定めるものです。ユーザーは本サービスを利用することにより、本規約に同意したものとみなされます。
           </p>
         </section>
 

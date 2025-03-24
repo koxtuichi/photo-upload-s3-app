@@ -1,6 +1,6 @@
 {
-  "name": "SnapVault",
-  "short_name": "SnapVault",
+  "name": "SnapStock",
+  "short_name": "SnapStock",
   "description": "写真をAWS S3に保存して閲覧できるアプリケーション",
   "start_url": "/",
   "display": "standalone",
