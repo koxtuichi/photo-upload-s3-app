@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthContext } from "@/providers/AuthProvider";
 import {
@@ -11,7 +11,7 @@ import {
   UserPlan,
 } from "@/lib/subscriptionService";
 
-export default function SubscriptionPage() {
+function SubscriptionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuthContext();
@@ -274,5 +274,21 @@ export default function SubscriptionPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// メインコンポーネントをSuspenseでラップ
+export default function SubscriptionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container mx-auto p-4">
+          <h1 className="text-2xl font-bold mb-6">サブスクリプション設定</h1>
+          <div className="mt-4">読み込み中...</div>
+        </div>
+      }
+    >
+      <SubscriptionContent />
+    </Suspense>
   );
 }
