@@ -7,22 +7,37 @@ import {
   SubscriptionPlan,
   PLAN_DETAILS,
   getUserPlan,
-  createCheckoutSession,
   UserPlan,
   recalculateStorageUsage,
 } from "@/lib/subscriptionService";
+import Script from "next/script";
+import { db } from "@/lib/firebase";
+import { doc, updateDoc } from "firebase/firestore";
+
+// PAY.JPの型定義
+declare global {
+  interface Window {
+    Payjp?: any;
+  }
+}
+
+// AWS Lambda APIエンドポイント
+const API_ENDPOINT =
+  "https://ng2bc45of9.execute-api.ap-northeast-1.amazonaws.com/prod/payJpFunc";
 
 function SubscriptionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuthContext();
   const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(
-    null
-  );
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [payjpLoaded, setPayjpLoaded] = useState(false);
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlan | null>(
+    null
+  );
 
   // セッションIDがURLに含まれている場合のメッセージ
   const sessionId = searchParams?.get("session_id");
@@ -32,6 +47,43 @@ function SubscriptionContent() {
       setMessage("サブスクリプションが正常に更新されました！");
     }
   }, [sessionId]);
+
+  // PAY.JPの初期化
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.Payjp) {
+      // PAY.JPの初期化
+      window.Payjp.setPublicKey(process.env.NEXT_PUBLIC_PAYJP_PUBLIC_KEY || "");
+      setPayjpLoaded(true);
+    }
+  }, []);
+
+  // PAY.JPのカード要素初期化
+  useEffect(() => {
+    if (showCardForm && payjpLoaded && window.Payjp) {
+      const elements = window.Payjp.elements();
+      const cardElement = elements.create("card", {
+        style: {
+          base: {
+            color: "#333333",
+            fontFamily: "sans-serif",
+            fontSize: "16px",
+            "::placeholder": {
+              color: "#999999",
+            },
+          },
+          invalid: {
+            color: "#E25950",
+          },
+        },
+      });
+      cardElement.mount("#payjp-element");
+
+      // クリーンアップ関数
+      return () => {
+        cardElement.unmount();
+      };
+    }
+  }, [showCardForm, payjpLoaded]);
 
   // 認証チェック
   useEffect(() => {
@@ -71,6 +123,12 @@ function SubscriptionContent() {
     fetchUserPlan();
   }, [user]);
 
+  // カード情報フォームの表示
+  const showPaymentForm = (planId: SubscriptionPlan) => {
+    setSelectedPlanId(planId);
+    setShowCardForm(true);
+  };
+
   // プラン変更処理
   const handlePlanChange = async (planId: SubscriptionPlan) => {
     if (!user?.uid) return;
@@ -87,23 +145,85 @@ function SubscriptionContent() {
         return;
       }
 
-      // チェックアウトセッションの作成
-      const sessionUrl = await createCheckoutSession(user.uid, planId);
-
-      // 無料プランの場合は再読み込み
+      // 無料プランの場合は直接更新
       if (planId === SubscriptionPlan.FREE) {
-        window.location.reload();
+        // Firestoreを直接更新
+        const userRef = doc(db, "users", user.uid);
+        await updateDoc(userRef, {
+          "plan.planId": planId,
+          "plan.status": "active",
+        });
+        setMessage("無料プランに更新されました");
+        setTimeout(() => window.location.reload(), 1500);
         return;
       }
 
-      // ページ遷移
-      router.push(sessionUrl);
+      // 有料プランの場合はカード情報入力フォームを表示
+      showPaymentForm(planId);
+      setIsProcessing(false);
     } catch (error: any) {
       setError(error.message || "プラン変更処理中にエラーが発生しました");
       console.error("プラン変更エラー:", error);
+      setIsProcessing(false);
+    }
+  };
+
+  // カード情報送信処理
+  const handleCardSubmit = async () => {
+    if (!user?.uid || !selectedPlanId || !window.Payjp || !payjpLoaded) {
+      setError("カード情報の処理に失敗しました。再度お試しください。");
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      // カード情報からトークンを作成
+      const result = await window.Payjp.createToken();
+
+      if (result.error) {
+        throw new Error(
+          `カード情報の処理に失敗しました: ${result.error.message}`
+        );
+      }
+
+      // AWS Lambda APIを呼び出す
+      const response = await fetch(API_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+          planId: selectedPlanId,
+          token: result.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "サブスクリプション処理に失敗しました");
+      }
+
+      setMessage(data.message || "サブスクリプションが更新されました");
+      setShowCardForm(false);
+
+      // 成功したら再読み込み
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error: any) {
+      setError(error.message || "カード処理中にエラーが発生しました");
+      console.error("カード処理エラー:", error);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // カード情報入力フォームをキャンセル
+  const handleCancelCardForm = () => {
+    setShowCardForm(false);
+    setSelectedPlanId(null);
   };
 
   // 人間可読形式のストレージサイズに変換
@@ -128,6 +248,20 @@ function SubscriptionContent() {
 
   return (
     <div className="container mx-auto p-4">
+      {/* PAY.JPのスクリプト読み込み */}
+      <Script
+        src="https://js.pay.jp/v2/pay.js"
+        strategy="afterInteractive"
+        onLoad={() => {
+          if (window.Payjp) {
+            window.Payjp.setPublicKey(
+              process.env.NEXT_PUBLIC_PAYJP_PUBLIC_KEY || ""
+            );
+            setPayjpLoaded(true);
+          }
+        }}
+      />
+
       <h1 className="text-2xl font-bold mb-6">サブスクリプション設定</h1>
 
       {message && (
@@ -157,6 +291,44 @@ function SubscriptionContent() {
       </div>
 
       <h2 className="text-xl font-semibold mb-4">利用可能なプラン</h2>
+
+      {/* カード情報入力フォーム */}
+      {showCardForm && (
+        <div className="mb-6 p-4 border rounded-lg bg-white shadow">
+          <h3 className="text-lg font-semibold mb-4">カード情報を入力</h3>
+          <div className="mb-4">
+            <p>
+              選択プラン: {selectedPlanId && PLAN_DETAILS[selectedPlanId].name}
+            </p>
+            <p>
+              料金: ¥{selectedPlanId && PLAN_DETAILS[selectedPlanId].price}/月
+            </p>
+          </div>
+
+          <div
+            id="payjp-element"
+            className="mb-4 p-3 border rounded"
+            style={{ minHeight: "100px" }}
+          ></div>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={handleCardSubmit}
+              disabled={isProcessing}
+              className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded"
+            >
+              {isProcessing ? "処理中..." : "支払い情報を送信"}
+            </button>
+            <button
+              onClick={handleCancelCardForm}
+              disabled={isProcessing}
+              className="py-2 px-4 bg-gray-300 hover:bg-gray-400 rounded"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-4">
         {/* 無料プラン */}
@@ -267,29 +439,27 @@ function SubscriptionContent() {
         </div>
       </div>
 
-      <div className="mt-8 text-sm text-gray-600 dark:text-gray-400">
-        <p>※ サブスクリプションは30日ごとに自動更新されます。</p>
-        <p>※ プランの変更は即時反映されます。</p>
-        <p>
-          ※
-          ダウングレードした場合、容量を超えるデータは閲覧できなくなる可能性があります。
-        </p>
+      {isProcessing && !showCardForm && (
+        <div className="mt-4 text-center">
+          <p>処理中...</p>
+        </div>
+      )}
+
+      <div className="mt-8 bg-gray-50 dark:bg-gray-800 p-4 rounded">
+        <h3 className="font-semibold mb-2">注意事項:</h3>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>プラン変更は即時反映されます</li>
+          <li>有料プランへのアップグレードは即時処理されます</li>
+          <li>解約や返金についてはお問い合わせください</li>
+        </ul>
       </div>
     </div>
   );
 }
 
-// メインコンポーネントをSuspenseでラップ
 export default function SubscriptionPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="container mx-auto p-4">
-          <h1 className="text-2xl font-bold mb-6">サブスクリプション設定</h1>
-          <div className="mt-4">読み込み中...</div>
-        </div>
-      }
-    >
+    <Suspense fallback={<div>読み込み中...</div>}>
       <SubscriptionContent />
     </Suspense>
   );
