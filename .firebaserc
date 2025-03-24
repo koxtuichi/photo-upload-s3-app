@@ -1,0 +1,5 @@
+{
+  "projects": {
+    "default": "photo-upload-s3-app"
+  }
+}

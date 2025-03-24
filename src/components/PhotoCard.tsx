@@ -3,17 +3,22 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { usePhotoStore, PhotoItem } from "@/store/photoStore";
+import { useTagStore, Tag } from "@/store/tagStore";
+import TagSelectionModal from "./TagSelectionModal";
 
 interface PhotoCardProps {
   photo: PhotoItem;
-  userId: string;
+  userId?: string;
 }
 
 const PhotoCard: React.FC<PhotoCardProps> = ({ photo, userId }) => {
   const { deletePhoto } = usePhotoStore();
+  const { tags, addTag, editTag, deleteTag } = useTagStore();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
   // 写真の削除ハンドラー
   const handleDelete = async (e: React.MouseEvent) => {
@@ -55,6 +60,52 @@ const PhotoCard: React.FC<PhotoCardProps> = ({ photo, userId }) => {
     });
   };
 
+  // タグの削除
+  const handleDeleteTag = async (
+    tagId: string,
+    isGlobalDelete: boolean = false
+  ) => {
+    if (isGlobalDelete) {
+      // タグそのものを削除する場合
+      const photoCount =
+        photo.tags?.filter((tag) => tag.id === tagId).length || 0;
+      if (
+        window.confirm(
+          `${photoCount}枚の写真が紐づいていますが、削除していいですか？`
+        )
+      ) {
+        try {
+          await deleteTag(tagId);
+        } catch (error) {
+          console.error("タグの削除エラー:", error);
+          alert("タグの削除中にエラーが発生しました。");
+        }
+      }
+    } else {
+      // 写真からタグを削除する場合
+      try {
+        photo.tags = photo.tags?.filter((tag) => tag.id !== tagId);
+      } catch (error) {
+        console.error("タグの削除エラー:", error);
+        alert("タグの削除中にエラーが発生しました。");
+      }
+    }
+  };
+
+  // タグの追加
+  const handleAddTags = (tags: Tag[]) => {
+    // 重複を防ぐため、既に追加されているタグは除外
+    const newTags = tags.filter(
+      (tag) => !photo.tags?.some((t) => t.id === tag.id)
+    );
+    if (newTags.length > 0) {
+      // 写真にタグを追加
+      photo.tags = [...(photo.tags || []), ...newTags];
+    }
+    setIsAddingTag(false);
+    setSelectedTags([]);
+  };
+
   // 画像が読み込み中または URL がない場合はローディング表示
   if (photo.isLoading || !photo.url) {
     return (
@@ -84,6 +135,25 @@ const PhotoCard: React.FC<PhotoCardProps> = ({ photo, userId }) => {
           <p className="text-white/80 text-sm">
             {formatDate(photo.uploadDate)}
           </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {photo.tags?.map((tag) => (
+              <div
+                key={tag.id}
+                className="px-2 py-1 bg-white/20 rounded-full text-sm flex items-center gap-1"
+              >
+                <span>{tag.name}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteTag(tag.id, false);
+                  }}
+                  className="hover:text-red-400"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* アクションボタン */}
@@ -109,6 +179,15 @@ const PhotoCard: React.FC<PhotoCardProps> = ({ photo, userId }) => {
               onClick={toggleFullScreen}
             >
               全画面表示
+            </button>
+            <button
+              className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsAddingTag(true);
+              }}
+            >
+              タグを追加
             </button>
             <button
               className="w-full px-4 py-2 text-left text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -165,10 +244,41 @@ const PhotoCard: React.FC<PhotoCardProps> = ({ photo, userId }) => {
               <p className="text-sm text-white/80">
                 {formatDate(photo.uploadDate)}
               </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {photo.tags?.map((tag) => (
+                  <div
+                    key={tag.id}
+                    className="px-2 py-1 bg-white/20 rounded-full text-sm flex items-center gap-1"
+                  >
+                    <span>{tag.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteTag(tag.id, false);
+                      }}
+                      className="hover:text-red-400"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* タグ選択モーダル */}
+      <TagSelectionModal
+        isOpen={isAddingTag}
+        onClose={() => {
+          setIsAddingTag(false);
+          setSelectedTags([]);
+        }}
+        onSelect={handleAddTags}
+        existingTags={tags}
+        selectedTags={selectedTags}
+      />
     </>
   );
 };

@@ -3,9 +3,10 @@ import { persist } from "zustand/middleware";
 import {
   listUserFiles,
   getSignedImageUrl,
-  uploadFileToS3,
+  uploadFile,
   deleteFileFromS3,
 } from "@/lib/s3";
+import { Tag } from "./tagStore";
 
 export interface PhotoItem {
   key: string;
@@ -14,6 +15,7 @@ export interface PhotoItem {
   name: string;
   size?: number;
   isLoading?: boolean;
+  tags?: Tag[];
 }
 
 interface PhotoStore {
@@ -23,7 +25,11 @@ interface PhotoStore {
 
   // アクション
   fetchUserPhotos: (userId: string) => Promise<void>;
-  uploadPhoto: (userId: string, file: File) => Promise<void>;
+  uploadPhoto: (
+    userId: string,
+    file: File,
+    onProgress?: (progress: number) => void
+  ) => Promise<void>;
   deletePhoto: (key: string) => Promise<void>;
   clearPhotos: () => void;
 }
@@ -95,37 +101,31 @@ export const usePhotoStore = create<PhotoStore>()(
       },
 
       // 写真をアップロード
-      uploadPhoto: async (userId: string, file: File) => {
+      uploadPhoto: async (
+        userId: string,
+        file: File,
+        onProgress?: (progress: number) => void
+      ) => {
         set({ isLoading: true, error: null });
         try {
-          const key = await uploadFileToS3(userId, file);
+          // 新しいuploadFile関数を使用
+          const { key, url } = await uploadFile(file, userId, onProgress);
           const fileName = file.name;
 
           // アップロードした写真を追加
           const newPhoto: PhotoItem = {
             key,
+            url, // 署名付きURLはすでに返されている
             uploadDate: new Date(),
             name: fileName,
             size: file.size,
-            isLoading: true,
+            isLoading: false, // URLは既に取得済み
           };
 
           set((state) => ({
             photos: [newPhoto, ...state.photos],
             isLoading: false,
           }));
-
-          // 署名付きURLを取得して更新
-          try {
-            const url = await getSignedImageUrl(key);
-            set((state) => ({
-              photos: state.photos.map((p) =>
-                p.key === key ? { ...p, url, isLoading: false } : p
-              ),
-            }));
-          } catch (error) {
-            console.error(`アップロード写真URLの取得エラー:`, error);
-          }
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           console.error("写真のアップロードエラー:", error);

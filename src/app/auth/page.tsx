@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/providers/AuthProvider";
-import Header from "@/components/Header";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -88,7 +87,6 @@ export default function AuthPage() {
 
   return (
     <>
-      <Header />
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">

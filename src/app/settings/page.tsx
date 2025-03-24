@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/providers/AuthProvider";
-import Header from "@/components/Header";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -137,7 +136,6 @@ export default function SettingsPage() {
 
   return (
     <>
-      <Header />
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-6">アカウント設定</h1>
 
