@@ -1,6 +1,6 @@
 {
-  "name": "Photo Upload S3 App",
-  "short_name": "Photo App",
+  "name": "SnapVault",
+  "short_name": "SnapVault",
   "description": "写真をAWS S3に保存して閲覧できるアプリケーション",
   "start_url": "/",
   "display": "standalone",

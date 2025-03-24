@@ -2,11 +2,12 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/providers/AuthProvider";
+import Header from "@/components/Header";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Photo Upload S3 App",
+  title: "SnapVault",
   description: "写真をAWS S3に保存して閲覧できるアプリケーション",
   manifest: "/manifest.json",
   icons: {
@@ -26,10 +27,10 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <head>
-        <meta name="application-name" content="Photo Upload S3 App" />
+        <meta name="application-name" content="SnapVault" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Photo App" />
+        <meta name="apple-mobile-web-app-title" content="SnapVault" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta
           name="viewport"
@@ -37,7 +38,10 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <Header />
+          <main className="min-h-[calc(100vh-64px)]">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );

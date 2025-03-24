@@ -2,12 +2,13 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthContext } from "@/providers/AuthProvider";
 
 const Header: React.FC = () => {
   const { user, logout } = useAuthContext();
   const router = useRouter();
+  const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -30,7 +31,7 @@ const Header: React.FC = () => {
           {/* ロゴ / アプリ名 */}
           <div className="flex-shrink-0">
             <Link href="/" className="text-xl font-bold text-blue-500">
-              Photo App
+              SnapVault
             </Link>
           </div>
 
@@ -38,6 +39,14 @@ const Header: React.FC = () => {
           <nav className="hidden md:flex items-center space-x-4">
             {user && (
               <>
+                <Link
+                  href="/"
+                  className={`text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400 ${
+                    pathname === "/" ? "text-blue-500 dark:text-blue-400" : ""
+                  }`}
+                >
+                  ホーム
+                </Link>
                 <Link
                   href="/settings"
                   className="text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400"
@@ -102,6 +111,15 @@ const Header: React.FC = () => {
           <div className="container mx-auto px-4 py-3 space-y-2">
             {user && (
               <>
+                <Link
+                  href="/"
+                  className={`block py-2 text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 ${
+                    pathname === "/" ? "text-blue-500 dark:text-blue-400" : ""
+                  }`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  ホーム
+                </Link>
                 <Link
                   href="/settings"
                   className="block py-2 text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400"
