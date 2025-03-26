@@ -176,6 +176,10 @@ export default function Home() {
 
     // ファイルブラウザを更新（キーを変更して強制的に再レンダリング）
     setFileBrowserKey((prev) => prev + 1);
+
+    // アップロード完了イベントを発行（ファイルブラウザの自動更新用）
+    const uploadCompleteEvent = new CustomEvent("upload-complete");
+    window.dispatchEvent(uploadCompleteEvent);
   };
 
   // ファイル入力からのアップロードハンドラー

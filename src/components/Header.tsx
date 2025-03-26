@@ -30,8 +30,31 @@ const Header: React.FC = () => {
         <div className="flex justify-between items-center h-16">
           {/* ロゴ / アプリ名 */}
           <div className="flex-shrink-0">
-            <Link href="/" className="text-xl font-bold text-blue-500">
-              SnapStock
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-xl font-bold"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                className="text-blue-600"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"
+                />
+                <circle cx="12" cy="11" r="3" strokeWidth="2" />
+                <line x1="8" y1="21" x2="16" y2="21" strokeWidth="2" />
+              </svg>
+              <span className="bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent font-extrabold">
+                SnapStock
+              </span>
             </Link>
           </div>
 

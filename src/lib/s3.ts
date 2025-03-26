@@ -12,7 +12,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { lookup } from "mime-types";
 import { createHash } from "crypto";
 import JSZip from "jszip";
-import ExifReader from "exifreader";
 import { Upload } from "@aws-sdk/lib-storage";
 
 // 環境変数の取得
@@ -53,243 +52,56 @@ const s3Client = new S3Client({
  */
 
 /**
- * 日付を指定された形式でフォーマットする関数
- * @param date 日付
- * @param format フォーマット（デフォルトは 'YYYY/MM/DD'）
- * @returns フォーマットされた日付文字列
+ * 日付をフォーマットする（YYYY/MM/DD形式）
  */
-export function formatDate(date: Date, format: string = "YYYY/MM/DD"): string {
+export const formatDate = (date: Date): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
-  return format
-    .replace("YYYY", String(year))
-    .replace("MM", month)
-    .replace("DD", day);
-}
+  return `${year}/${month}/${day}`;
+};
 
 /**
- * ファイルの拡張子からディレクトリ名を取得する関数
- * @param fileName ファイル名
- * @returns ディレクトリ名
+ * ファイルタイプに基づいてS3のディレクトリを取得する
  */
-export function getDirectoryFromFileType(fileName: string): string {
-  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+export const getDirectoryFromFileType = (fileName: string): string => {
+  const fileExt = fileName.split(".").pop()?.toLowerCase() || "";
 
-  // 一般的な画像形式
-  if (["jpg", "jpeg", "png", "gif", "webp", "heic"].includes(ext)) {
-    return ext === "jpeg" ? "jpg" : ext;
+  // 画像ファイル（JPG、JPEG、PNG、GIF、WEBP）
+  if (/^(jpg|jpeg|png|gif|webp)$/i.test(fileExt)) {
+    return "jpg";
   }
-
-  // RAW形式 - 幅広いカメラメーカーに対応
-  const rawExtensions = [
-    "raw",
-    "arw",
-    "cr2",
-    "cr3",
-    "nef",
-    "nrw",
-    "orf",
-    "rw2",
-    "pef",
-    "dng",
-    "raf",
-    "sr2",
-    "3fr",
-    "ari",
-    "bay",
-    "braw",
-    "cap",
-    "ce1",
-    "ce2",
-    "cib",
-    "craw",
-    "crw",
-    "dcr",
-    "dcs",
-    "drf",
-    "eip",
-    "erf",
-    "fff",
-    "gpr",
-    "iiq",
-    "k25",
-    "kc2",
-    "kdc",
-    "mdc",
-    "mef",
-    "mos",
-    "mrw",
-    "nex",
-    "ptx",
-    "pxn",
-    "r3d",
-    "ra2",
-    "rwl",
-    "srw",
-    "x3f",
-  ];
-  if (rawExtensions.includes(ext)) {
+  // RAW形式の写真ファイル
+  else if (
+    /^(arw|cr2|cr3|nef|dng|orf|rw2|raf|x3f|pef|3fr|ari|bay|braw|cap|ce1|ce2|cib|craw|crw|dcr|dcs|drf|eip|erf|fff|gpr|iiq|k25|kc2|kdc|mdc|mef|mos|mrw|nex|ptx|pxn|r3d|ra2|rwl|srw)$/i.test(
+      fileExt
+    )
+  ) {
     return "raw";
   }
-
-  // 動画形式
-  if (["mp4", "mov", "avi", "wmv"].includes(ext)) {
+  // 動画ファイル
+  else if (/^(mp4|mov|avi|wmv|flv|mkv|webm)$/i.test(fileExt)) {
     return "video";
   }
-
-  // その他は'other'ディレクトリに
-  return "other";
-}
-
-/**
- * ファイルからEXIF情報を読み取り、撮影日を取得する
- * @param file 画像ファイル
- * @returns 撮影日が含まれていればDateオブジェクト、なければnull
- */
-export const getPhotoTakenDate = async (file: File): Promise<Date | null> => {
-  try {
-    // ファイルの拡張子を取得
-    const extension = file.name.split(".").pop()?.toLowerCase() || "";
-
-    // RAW形式のファイルや非画像ファイルの場合はEXIF読み取りをスキップ
-    const rawExtensions = [
-      "raw",
-      "arw",
-      "cr2",
-      "cr3",
-      "nef",
-      "nrw",
-      "orf",
-      "rw2",
-      "pef",
-      "dng",
-      "raf",
-      "sr2",
-      "3fr",
-      "ari",
-      "bay",
-      "braw",
-      "cap",
-      "ce1",
-      "ce2",
-      "cib",
-      "craw",
-      "crw",
-      "dcr",
-      "dcs",
-      "drf",
-      "eip",
-      "erf",
-      "fff",
-      "gpr",
-      "iiq",
-      "k25",
-      "kc2",
-      "kdc",
-      "mdc",
-      "mef",
-      "mos",
-      "mrw",
-      "nex",
-      "ptx",
-      "pxn",
-      "r3d",
-      "ra2",
-      "rwl",
-      "srw",
-      "x3f",
-    ];
-
-    // RAW形式またはimage/で始まらないContent-Typeの場合はnullを返す
-    if (rawExtensions.includes(extension) || !file.type.startsWith("image/")) {
-      console.log(`EXIF読み取りをスキップ: ${file.name} (${file.type})`);
-      return null;
-    }
-
-    // FileオブジェクトをArrayBufferに変換
-    const buffer = await file.arrayBuffer();
-
-    // EXIF情報を読み取る
-    const tags = ExifReader.load(buffer);
-
-    // DateTimeOriginalが存在すれば、それを使用
-    if (tags.DateTimeOriginal) {
-      const dateStr = tags.DateTimeOriginal.description;
-      // YYYY:MM:DD HH:MM:SS フォーマットを解析
-      const [datePart, timePart] = dateStr.split(" ");
-      const [year, month, day] = datePart.split(":");
-      const [hour, minute, second] = timePart
-        ? timePart.split(":")
-        : ["0", "0", "0"];
-
-      // 月は0始まりなので-1する
-      return new Date(
-        parseInt(year, 10),
-        parseInt(month, 10) - 1,
-        parseInt(day, 10),
-        parseInt(hour, 10),
-        parseInt(minute, 10),
-        parseInt(second, 10)
-      );
-    }
-
-    // DateTimeOriginalがなくてもCreateDateまたはDateTimeがあれば使用
-    if (tags.CreateDate) {
-      const dateStr = tags.CreateDate.description;
-      const [datePart, timePart] = dateStr.split(" ");
-      const [year, month, day] = datePart.split(":");
-      const [hour, minute, second] = timePart
-        ? timePart.split(":")
-        : ["0", "0", "0"];
-
-      return new Date(
-        parseInt(year, 10),
-        parseInt(month, 10) - 1,
-        parseInt(day, 10),
-        parseInt(hour, 10),
-        parseInt(minute, 10),
-        parseInt(second, 10)
-      );
-    }
-
-    if (tags.DateTime) {
-      const dateStr = tags.DateTime.description;
-      const [datePart, timePart] = dateStr.split(" ");
-      const [year, month, day] = datePart.split(":");
-      const [hour, minute, second] = timePart
-        ? timePart.split(":")
-        : ["0", "0", "0"];
-
-      return new Date(
-        parseInt(year, 10),
-        parseInt(month, 10) - 1,
-        parseInt(day, 10),
-        parseInt(hour, 10),
-        parseInt(minute, 10),
-        parseInt(second, 10)
-      );
-    }
-
-    return null;
-  } catch (error) {
-    console.error("EXIF情報の読み取りに失敗しました:", error);
-    return null;
+  // PDFファイル
+  else if (/^pdf$/i.test(fileExt)) {
+    return "pdf";
+  }
+  // その他のファイル
+  else {
+    return "other";
   }
 };
 
 /**
- * 撮影日付に基づいてS3のパスを生成する
- * @param file ファイル
+ * ファイルの日付からS3のパスを生成する
+ * @param file アップロードするファイル
  * @param userId ユーザーID
- * @param takenDate 撮影日
  * @returns S3のパス
  */
 export const generateS3PathFromDate = async (
   file: File,
-  userId: string,
-  takenDate?: Date | null
+  userId: string
 ): Promise<string> => {
   // ファイル拡張子を取得
   const extension = file.name.split(".").pop()?.toLowerCase() || "";
@@ -307,23 +119,18 @@ export const generateS3PathFromDate = async (
   }
 
   // 日付の優先順位:
-  // 1. EXIF撮影日 (takenDate)
-  // 2. ファイルの最終更新日 (file.lastModified)
-  // 3. 現在の日付 (fallback)
+  // 1. ファイルの最終更新日 (file.lastModified)
+  // 2. 現在の日付 (fallback)
   let date: Date;
 
-  if (takenDate) {
-    // 1. EXIF撮影日がある場合
-    date = takenDate;
-    console.log(`${file.name}: EXIF撮影日を使用 (${date.toISOString()})`);
-  } else if (file.lastModified) {
-    // 2. ファイルの最終更新日を使用
+  if (file.lastModified) {
+    // 1. ファイルの最終更新日を使用
     date = new Date(file.lastModified);
     console.log(
       `${file.name}: ファイル最終更新日を使用 (${date.toISOString()})`
     );
   } else {
-    // 3. どちらもなければ現在の日付
+    // 2. どちらもなければ現在の日付
     date = new Date();
     console.log(`${file.name}: 現在の日付を使用 (${date.toISOString()})`);
   }
@@ -338,9 +145,46 @@ export const generateS3PathFromDate = async (
 };
 
 /**
- * 特定のユーザーのディレクトリ構造を取得する関数
+ * rawThumbnailかどうかを判定
+ * @param path S3のパスまたはディレクトリ名
+ * @returns rawThumbnailなら true
+ */
+export const isRawThumbnailPath = (path: string): boolean => {
+  // 完全なパス（例: user/userId/rawThumbnail/2023/02/01/）またはディレクトリ名（例: rawThumbnail）を処理
+  return (
+    path.includes("/rawThumbnail/") ||
+    path === "rawThumbnail" ||
+    path.endsWith("/rawThumbnail")
+  );
+};
+
+/**
+ * jpgThumbnailかどうかを判定
+ * @param path S3のパスまたはディレクトリ名
+ * @returns jpgThumbnailなら true
+ */
+export const isJpgThumbnailPath = (path: string): boolean => {
+  // 完全なパス（例: user/userId/jpgThumbnail/2023/02/01/）またはディレクトリ名（例: jpgThumbnail）を処理
+  return (
+    path.includes("/jpgThumbnail/") ||
+    path === "jpgThumbnail" ||
+    path.endsWith("/jpgThumbnail")
+  );
+};
+
+/**
+ * サムネイルディレクトリかどうかを判定
+ * @param path S3のパスまたはディレクトリ名
+ * @returns サムネイルディレクトリなら true
+ */
+export const isThumbnailPath = (path: string): boolean => {
+  return isRawThumbnailPath(path) || isJpgThumbnailPath(path);
+};
+
+/**
+ * 特定のユーザーのディレクトリ一覧を取得する関数
  * @param userId ユーザーID
- * @returns ディレクトリ構造
+ * @returns ディレクトリPrefix一覧
  */
 export async function listUserDirectories(userId: string) {
   if (!accessKeyId || !secretAccessKey) {
@@ -358,7 +202,10 @@ export async function listUserDirectories(userId: string) {
 
   try {
     const response = await s3Client.send(command);
-    return response.CommonPrefixes || [];
+    // サムネイルディレクトリをフィルタリング
+    return (response.CommonPrefixes || []).filter(
+      (prefix) => prefix.Prefix && !isThumbnailPath(prefix.Prefix)
+    );
   } catch (error) {
     console.error("S3からのディレクトリ一覧取得エラー:", error);
     return [];
@@ -509,8 +356,8 @@ export async function listDayDirectories(monthDirectoryPath: string) {
 }
 
 /**
- * S3にファイルをアップロードする
- * @param file ファイル
+ * ファイルをS3にアップロードする
+ * @param file アップロードするファイル
  * @param userId ユーザーID
  * @param onProgress 進捗状況コールバック (0～100の数値)
  * @returns アップロード結果
@@ -531,11 +378,8 @@ export const uploadFile = async (
     // (S3 Client SDKが要求するフォーマット)
     const fileData = new Uint8Array(fileArrayBuffer);
 
-    // EXIFから撮影日を取得
-    const takenDate = await getPhotoTakenDate(file);
-
-    // ファイルパスを生成（撮影日がある場合はそれを使用）
-    const key = await generateS3PathFromDate(file, userId, takenDate);
+    // ファイルパスを生成（日付を使用）
+    const key = await generateS3PathFromDate(file, userId);
 
     // Content-Typeを自動検出
     const contentType = file.type || "application/octet-stream";
@@ -557,66 +401,73 @@ export const uploadFile = async (
       leavePartsOnError: false, // エラー発生時にアップロード済みのパートを削除
     });
 
-    // 進捗状況の監視を設定
-    upload.on(
-      "httpUploadProgress",
-      (progress: { loaded?: number; total?: number }) => {
-        if (progress.loaded && progress.total && onProgress) {
-          // 1%から始めて100%まで進捗を計算（最初の1%は既に表示済み）
-          const percentage = Math.min(
-            99,
-            Math.floor((progress.loaded / progress.total) * 99) + 1
-          );
-          onProgress(percentage);
-        }
-      }
-    );
+    // 進捗状況を監視
+    upload.on("httpUploadProgress", (progress) => {
+      // 進捗率を計算 (0～100%)
+      const progressPercentage = Math.round(
+        ((progress.loaded || 0) / (progress.total || 1)) * 99
+      );
+      // 99%までの進捗を報告（100%はアップロード完了後に設定）
+      if (onProgress) onProgress(progressPercentage);
+    });
 
-    // アップロードを実行
-    await upload.done();
+    // アップロード実行
+    const result = await upload.done();
 
-    // 完了時に100%を設定
+    // 進捗100%を報告
     if (onProgress) onProgress(100);
 
-    // 署名付きURLを生成（24時間有効）
-    const url = await getSignedImageUrl(key, 86400);
+    // 署名付きURLを取得
+    const url = await getSignedImageUrl(key);
 
-    // 成功結果を返す
     return { key, url };
   } catch (error) {
-    console.error("ファイルアップロードエラー:", error);
+    console.error("S3アップロードエラー:", error);
     throw error;
   }
 };
 
 /**
- * 署名付きURLを生成して画像を取得する関数
- * @param key S3のオブジェクトキー
- * @param expiresIn 有効期限（秒）
- * @returns 署名付きURL
+ * 画像の署名付きURLを取得する
  */
-export async function getSignedImageUrl(key: string, expiresIn = 3600) {
-  if (!accessKeyId || !secretAccessKey) {
-    console.error(
-      "AWS認証情報が設定されていません。環境変数を確認してください。"
-    );
-    // ダミーURL（エラー表示用）を返す
-    return "/next.svg";
-  }
-
-  const command = new GetObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-  });
-
+export const getSignedImageUrl = async (key: string): Promise<string> => {
   try {
-    return await getSignedUrl(s3Client, command, { expiresIn });
+    // keyが無効な場合は早期リターン
+    if (!key || typeof key !== "string") {
+      console.error("無効なキーが指定されました:", key);
+      return "/file.svg"; // フォールバックイメージ
+    }
+
+    // S3クライアントと認証情報が有効か確認
+    if (!s3Client || !BUCKET_NAME) {
+      console.error("S3クライアントまたはバケット名が設定されていません");
+      return "/file.svg"; // フォールバックイメージ
+    }
+
+    // URLディレクトリトラバーサル対策
+    const sanitizedKey = key.replace(/\.\.\//g, "");
+
+    // GetObjectCommandの設定オプション
+    const commandOptions = {
+      Bucket: BUCKET_NAME,
+      Key: sanitizedKey,
+    };
+
+    // 署名付きURLを生成 (有効期限を短めに設定)
+    const signedUrl = await getSignedUrl(
+      s3Client,
+      new GetObjectCommand(commandOptions),
+      {
+        expiresIn: 3600, // 1時間
+      }
+    );
+
+    return signedUrl;
   } catch (error) {
-    console.error("署名付きURL生成エラー:", error);
-    // エラー時はダミーのURLを返す
-    return "/next.svg";
+    console.error(`署名付きURL生成エラー (${key}):`, error);
+    return "/file.svg"; // エラー時のフォールバック
   }
-}
+};
 
 /**
  * S3からファイルを削除する関数
@@ -725,11 +576,13 @@ export async function downloadDirectory(directoryPath: string): Promise<Blob> {
  * 複数ファイルを並列でダウンロードしてZIPファイルにまとめる関数
  * @param keys ダウンロードするファイルのキー配列
  * @param zipName ZIPファイルの名前（拡張子なし）
+ * @param onProgress 進捗状況コールバック関数 (完了数, 合計数)
  * @returns ZIPファイルのBlob
  */
 export async function downloadMultipleFiles(
   keys: string[],
-  zipName: string = "download"
+  zipName: string = "download",
+  onProgress?: (completed: number, total: number) => void
 ): Promise<Blob> {
   if (!accessKeyId || !secretAccessKey) {
     throw new Error(
@@ -748,6 +601,8 @@ export async function downloadMultipleFiles(
     // 最大10件ずつの並列ダウンロードを実行
     const batchSize = 10;
     const batches = [];
+    const totalFiles = keys.length;
+    let completedFiles = 0;
 
     for (let i = 0; i < keys.length; i += batchSize) {
       const batch = keys.slice(i, i + batchSize);
@@ -758,9 +613,23 @@ export async function downloadMultipleFiles(
           try {
             const fileBlob = await downloadFile(key);
             const fileName = key.split("/").pop() || "unknown";
+
+            // 1ファイルのダウンロードが完了したら進捗を更新
+            completedFiles++;
+            if (onProgress) {
+              onProgress(completedFiles, totalFiles);
+            }
+
             return { fileName, fileBlob };
           } catch (error) {
             console.error(`ファイル ${key} のダウンロードに失敗:`, error);
+
+            // エラーが発生しても進捗はカウント
+            completedFiles++;
+            if (onProgress) {
+              onProgress(completedFiles, totalFiles);
+            }
+
             return null;
           }
         })
@@ -787,7 +656,122 @@ export async function downloadMultipleFiles(
   }
 }
 
-// 外部から使用するための関数をエクスポート
+/**
+ * 通常のファイルパスからサムネイルパスに変換する
+ * @param path 元のファイルパス（jpg/またはraw/を含む）
+ * @returns サムネイルパス
+ */
+export const getFilePathToThumbnailPath = (path: string): string => {
+  // パスがjpgディレクトリを含む場合
+  if (path.includes("/jpg/")) {
+    return path.replace("/jpg/", "/jpgThumbnail/");
+  }
+  // パスがrawディレクトリを含む場合
+  if (path.includes("/raw/")) {
+    return path.replace("/raw/", "/rawThumbnail/");
+  }
+  return path; // 変換できない場合は元のパスを返す
+};
+
+/**
+ * サムネイルパスから通常のファイルパスに変換する
+ * @param thumbnailPath サムネイルパス（jpgThumbnail/またはrawThumbnail/を含む）
+ * @returns 元のファイルパス
+ */
+export const getThumbnailPathToFilePath = (thumbnailPath: string): string => {
+  // パスがjpgThumbnailディレクトリを含む場合
+  if (thumbnailPath.includes("/jpgThumbnail/")) {
+    return thumbnailPath.replace("/jpgThumbnail/", "/jpg/");
+  }
+  // パスがrawThumbnailディレクトリを含む場合
+  if (thumbnailPath.includes("/rawThumbnail/")) {
+    return thumbnailPath.replace("/rawThumbnail/", "/raw/");
+  }
+  return thumbnailPath; // 変換できない場合は元のパスを返す
+};
+
+/**
+ * サムネイルパスを生成する
+ * @param rawFilePath RAWファイルのパス
+ * @returns サムネイルのパス
+ */
+const getThumbnailPath = (filePath: string): string | null => {
+  try {
+    // ファイルパスからサムネイルパスへの変換
+    return getFilePathToThumbnailPath(filePath);
+  } catch (error) {
+    console.error("サムネイルパス生成エラー:", error);
+    return null;
+  }
+};
+
+/**
+ * RAWファイル用のサムネイルURLを取得
+ * @param filePath RAWファイルのパス
+ * @returns サムネイルの署名付きURL
+ */
+const getRawThumbnailUrl = async (filePath: string): Promise<string> => {
+  try {
+    console.log(`サムネイルURL取得開始: ${filePath}`);
+
+    // パスが空または無効な場合は早期リターン
+    if (!filePath || typeof filePath !== "string") {
+      console.error("無効なファイルパス:", filePath);
+      return "/file.svg";
+    }
+
+    // ファイル名からサムネイル名に変換する関数
+    const getThumbFilename = (filename: string) => {
+      const baseName = filename.substring(0, filename.lastIndexOf("."));
+      return `${baseName}_thumb.jpg`;
+    };
+
+    // ファイルパスからサムネイルパスを生成
+    let thumbnailPath = "";
+    const pathParts = filePath.split("/");
+    const fileName = pathParts[pathParts.length - 1];
+
+    if (filePath.includes("/raw/")) {
+      // RAWファイルの場合
+      thumbnailPath = filePath
+        .replace("/raw/", "/rawThumbnail/")
+        .replace(/\/[^\/]+$/, `/${getThumbFilename(fileName)}`);
+    } else if (filePath.includes("/jpg/")) {
+      // JPGファイルの場合
+      thumbnailPath = filePath
+        .replace("/jpg/", "/jpgThumbnail/")
+        .replace(/\/[^\/]+$/, `/${getThumbFilename(fileName)}`);
+    } else {
+      // その他のファイルタイプはサポート外
+      console.log(`サポート外のファイルパス: ${filePath}`);
+      return "/file.svg";
+    }
+
+    console.log(`生成したサムネイルパス: ${thumbnailPath}`);
+
+    // サムネイルの署名付きURLを取得
+    try {
+      const signedUrl = await getSignedImageUrl(thumbnailPath);
+
+      // URLが取得できたか確認
+      if (!signedUrl) {
+        console.warn(`サムネイルURLの取得失敗 (空のURL): ${thumbnailPath}`);
+        return "/file.svg";
+      }
+
+      console.log(`サムネイルURL取得成功: ${signedUrl}`);
+      return signedUrl;
+    } catch (error) {
+      console.warn(`サムネイルURLの取得に失敗: ${thumbnailPath}`, error);
+      return "/file.svg";
+    }
+  } catch (error) {
+    console.error("サムネイルURL取得エラー:", error);
+    return "/file.svg";
+  }
+};
+
+// S3のAPIs
 export const S3ClientAPI = {
   formatDate,
   getDirectoryFromFileType,
@@ -804,4 +788,99 @@ export const S3ClientAPI = {
   downloadFile,
   downloadDirectory,
   downloadMultipleFiles,
+  getFilePathToThumbnailPath,
+  getThumbnailPathToFilePath,
+  getThumbnailPath,
+  getRawThumbnailUrl,
+
+  // オブジェクトのメタデータを取得
+  async getObjectMetadata(key: string): Promise<any> {
+    try {
+      const response = await fetch(
+        `/api/s3/metadata?key=${encodeURIComponent(key)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to get object metadata: ${response.statusText}`
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting object metadata:", error);
+      throw error;
+    }
+  },
+
+  // 指定ディレクトリ内のオブジェクト一覧を取得
+  async listObjects(prefix: string): Promise<string[]> {
+    try {
+      const response = await fetch(
+        `/api/s3/list?prefix=${encodeURIComponent(prefix)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to list objects: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.keys || [];
+    } catch (error) {
+      console.error("Error listing objects:", error);
+      throw error;
+    }
+  },
+
+  deleteFile: async (fileKey: string): Promise<void> => {
+    try {
+      console.log(`S3から削除: ${fileKey}`);
+
+      // メインファイルの削除
+      const deleteCommand = new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: fileKey,
+      });
+      await s3Client.send(deleteCommand);
+
+      // サムネイルパスを生成
+      let thumbnailKey = "";
+      if (fileKey.includes("/raw/")) {
+        thumbnailKey = fileKey
+          .replace("/raw/", "/rawThumbnail/")
+          .replace(/\.[^.]+$/, "_thumb.jpg");
+      } else if (fileKey.includes("/jpg/")) {
+        thumbnailKey = fileKey
+          .replace("/jpg/", "/jpgThumbnail/")
+          .replace(/\.[^.]+$/, "_thumb.jpg");
+      }
+
+      if (thumbnailKey) {
+        console.log(`サムネイルを削除: ${thumbnailKey}`);
+        // サムネイルの削除
+        const deleteThumbnailCommand = new DeleteObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: thumbnailKey,
+        });
+        await s3Client.send(deleteThumbnailCommand);
+      }
+
+      console.log(`削除完了: ${fileKey}`);
+    } catch (error) {
+      console.error("ファイル削除エラー:", error);
+      throw error;
+    }
+  },
 };

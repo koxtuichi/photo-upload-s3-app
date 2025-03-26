@@ -350,8 +350,22 @@ const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({ userId }) => {
                         e.stopPropagation();
                         handleFileDownload(file);
                       }}
-                      className="mt-2 text-sm text-blue-500 hover:text-blue-700"
+                      className="mt-2 px-3 py-1.5 flex items-center text-sm text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-full shadow-sm hover:shadow-md transition-all duration-200 transform hover:-translate-y-0.5"
                     >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4 mr-1"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
+                      </svg>
                       ダウンロード
                     </button>
                   </div>

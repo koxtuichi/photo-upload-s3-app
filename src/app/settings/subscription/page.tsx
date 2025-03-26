@@ -18,6 +18,7 @@ import { doc, updateDoc } from "firebase/firestore";
 declare global {
   interface Window {
     Payjp?: any;
+    payjpInstance?: any;
   }
 }
 
@@ -50,39 +51,120 @@ function SubscriptionContent() {
 
   // PAY.JPの初期化
   useEffect(() => {
-    if (typeof window !== "undefined" && window.Payjp) {
-      // PAY.JPの初期化
-      window.Payjp.setPublicKey(process.env.NEXT_PUBLIC_PAYJP_PUBLIC_KEY || "");
+    if (
+      typeof window !== "undefined" &&
+      window.Payjp &&
+      !window.payjpInstance
+    ) {
+      // テスト環境の公開キーを使用
+      window.payjpInstance = window.Payjp("pk_test_86bb235a244b9fcdcc597fe4");
       setPayjpLoaded(true);
     }
   }, []);
 
   // PAY.JPのカード要素初期化
   useEffect(() => {
-    if (showCardForm && payjpLoaded && window.Payjp) {
-      const elements = window.Payjp.elements();
-      const cardElement = elements.create("card", {
+    let cardElement: any = null;
+
+    const initializeCardElement = () => {
+      if (!window.payjpInstance) {
+        console.error("PAY.JPインスタンスが見つかりません");
+        return;
+      }
+
+      const elements = window.payjpInstance.elements();
+      cardElement = elements.create("card", {
         style: {
           base: {
             color: "#333333",
             fontFamily: "sans-serif",
             fontSize: "16px",
+            lineHeight: "40px",
+            fontSmoothing: "antialiased",
+            backgroundColor: "#ffffff",
             "::placeholder": {
               color: "#999999",
             },
           },
           invalid: {
             color: "#E25950",
+            iconColor: "#E25950",
           },
         },
+        classes: {
+          base: "payjp-element",
+          focus: "focused",
+          invalid: "invalid",
+        },
+        placeholder: {
+          number: "カード番号",
+          exp: "有効期限 (MM/YY)",
+          cvc: "セキュリティコード",
+        },
       });
-      cardElement.mount("#payjp-element");
 
-      // クリーンアップ関数
-      return () => {
-        cardElement.unmount();
-      };
+      // 要素のマウント
+      try {
+        const mountElement = document.querySelector("#payjp-element");
+        if (!mountElement) {
+          console.error("マウント要素が見つかりません");
+          return;
+        }
+
+        cardElement.mount("#payjp-element");
+        console.log("カード要素が正常にマウントされました");
+
+        // イベントリスナーの設定
+        cardElement.on("change", (event: any) => {
+          const element = document.querySelector("#payjp-element");
+
+          if (event.complete) {
+            // 入力が完了した場合
+            element?.classList.add(
+              "ring-2",
+              "ring-green-500",
+              "border-transparent"
+            );
+          } else if (event.error) {
+            // エラーがある場合
+            element?.classList.add(
+              "ring-2",
+              "ring-red-500",
+              "border-transparent"
+            );
+            setError(event.error.message);
+          } else {
+            // 通常の状態
+            element?.classList.remove(
+              "ring-2",
+              "ring-green-500",
+              "ring-red-500",
+              "border-transparent"
+            );
+            setError(null);
+          }
+        });
+      } catch (error) {
+        console.error("PAY.JP要素のマウントエラー:", error);
+        setError("カード情報入力フォームの初期化に失敗しました");
+      }
+    };
+
+    // カード要素の初期化を遅延実行
+    if (showCardForm && payjpLoaded) {
+      setTimeout(initializeCardElement, 500);
     }
+
+    // クリーンアップ関数
+    return () => {
+      if (cardElement) {
+        try {
+          cardElement.unmount();
+        } catch (error) {
+          console.error("PAY.JP要素のアンマウントエラー:", error);
+        }
+      }
+    };
   }, [showCardForm, payjpLoaded]);
 
   // 認証チェック
@@ -170,7 +252,12 @@ function SubscriptionContent() {
 
   // カード情報送信処理
   const handleCardSubmit = async () => {
-    if (!user?.uid || !selectedPlanId || !window.Payjp || !payjpLoaded) {
+    if (
+      !user?.uid ||
+      !selectedPlanId ||
+      !window.payjpInstance ||
+      !payjpLoaded
+    ) {
       setError("カード情報の処理に失敗しました。再度お試しください。");
       return;
     }
@@ -179,14 +266,31 @@ function SubscriptionContent() {
     setError(null);
 
     try {
-      // カード情報からトークンを作成
-      const result = await window.Payjp.createToken();
+      const elements = window.payjpInstance.elements();
+      const cardElement = elements.getElement("card");
 
-      if (result.error) {
-        throw new Error(
-          `カード情報の処理に失敗しました: ${result.error.message}`
-        );
+      if (!cardElement) {
+        console.error("カード要素が見つかりません");
+        throw new Error("カード情報の要素が見つかりません");
       }
+
+      console.log("カード要素が正常に取得されました");
+
+      // トークン作成をPromiseでラップ
+      const tokenResult = await new Promise<{ id: string }>(
+        (resolve, reject) => {
+          window.payjpInstance.createToken(
+            cardElement,
+            (status: number, response: any) => {
+              if (status === 200) {
+                resolve(response);
+              } else {
+                reject(new Error(response.error.message));
+              }
+            }
+          );
+        }
+      );
 
       // AWS Lambda APIを呼び出す
       const response = await fetch(API_ENDPOINT, {
@@ -197,7 +301,7 @@ function SubscriptionContent() {
         body: JSON.stringify({
           userId: user.uid,
           planId: selectedPlanId,
-          token: result.id,
+          token: tokenResult.id,
         }),
       });
 
@@ -253,9 +357,13 @@ function SubscriptionContent() {
         src="https://js.pay.jp/v2/pay.js"
         strategy="afterInteractive"
         onLoad={() => {
-          if (window.Payjp) {
-            window.Payjp.setPublicKey(
-              process.env.NEXT_PUBLIC_PAYJP_PUBLIC_KEY || ""
+          if (
+            typeof window !== "undefined" &&
+            window.Payjp &&
+            !window.payjpInstance
+          ) {
+            window.payjpInstance = window.Payjp(
+              "pk_test_86bb235a244b9fcdcc597fe4"
             );
             setPayjpLoaded(true);
           }
@@ -294,35 +402,49 @@ function SubscriptionContent() {
 
       {/* カード情報入力フォーム */}
       {showCardForm && (
-        <div className="mb-6 p-4 border rounded-lg bg-white shadow">
+        <div className="mb-6 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800 shadow">
           <h3 className="text-lg font-semibold mb-4">カード情報を入力</h3>
-          <div className="mb-4">
-            <p>
+          <div className="mb-4 bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <p className="text-gray-800 dark:text-gray-200">
               選択プラン: {selectedPlanId && PLAN_DETAILS[selectedPlanId].name}
             </p>
-            <p>
+            <p className="text-gray-800 dark:text-gray-200 mt-1">
               料金: ¥{selectedPlanId && PLAN_DETAILS[selectedPlanId].price}/月
             </p>
           </div>
 
-          <div
-            id="payjp-element"
-            className="mb-4 p-3 border rounded"
-            style={{ minHeight: "100px" }}
-          ></div>
+          <div className="mb-4 bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              カード情報
+            </label>
+            <div
+              id="payjp-element"
+              className="p-3 border rounded bg-white"
+              style={{
+                minHeight: "40px",
+              }}
+            ></div>
+            <p className="mt-2 text-sm text-gray-500">
+              ※ テスト用カード番号: 4242 4242 4242 4242
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              ※ テスト用有効期限: 12/25
+            </p>
+            <p className="mt-1 text-sm text-gray-500">※ テスト用CVC: 123</p>
+          </div>
 
           <div className="flex space-x-3">
             <button
               onClick={handleCardSubmit}
-              disabled={isProcessing}
-              className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded"
+              disabled={isProcessing || !payjpLoaded}
+              className="py-2 px-6 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors duration-200 disabled:opacity-50"
             >
               {isProcessing ? "処理中..." : "支払い情報を送信"}
             </button>
             <button
               onClick={handleCancelCardForm}
               disabled={isProcessing}
-              className="py-2 px-4 bg-gray-300 hover:bg-gray-400 rounded"
+              className="py-2 px-6 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg font-medium transition-colors duration-200"
             >
               キャンセル
             </button>
@@ -446,11 +568,23 @@ function SubscriptionContent() {
       )}
 
       <div className="mt-8 bg-gray-50 dark:bg-gray-800 p-4 rounded">
+        <div className="mb-4 bg-blue-100 dark:bg-blue-900 p-4 rounded">
+          <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">
+            🎉 期間限定キャンペーン
+          </h3>
+          <p className="text-blue-700 dark:text-blue-300">
+            2025年4月末までの期間限定で、全てのプランでストレージ容量無制限でご利用いただけます！
+          </p>
+        </div>
+
         <h3 className="font-semibold mb-2">注意事項:</h3>
         <ul className="list-disc pl-5 space-y-1">
           <li>プラン変更は即時反映されます</li>
           <li>有料プランへのアップグレードは即時処理されます</li>
           <li>解約や返金についてはお問い合わせください</li>
+          <li>
+            キャンペーン期間（2025年4月末まで）終了後は、各プランの通常の容量制限が適用されます
+          </li>
         </ul>
       </div>
     </div>

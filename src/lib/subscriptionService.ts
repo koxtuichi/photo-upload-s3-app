@@ -115,22 +115,36 @@ export async function recalculateStorageUsage(userId: string): Promise<number> {
   }
 }
 
-// ストレージ制限の確認
-export async function checkStorageLimit(
+// ストレージ制限のチェック
+export const checkStorageLimit = async (
   userId: string,
   fileSize: number
-): Promise<boolean> {
-  const userPlan = await getUserPlan(userId);
+): Promise<boolean> => {
+  try {
+    // 2025年4月末までは制限を無効化
+    const promotionEndDate = new Date("2025-04-30T23:59:59.999Z");
+    const currentDate = new Date();
 
-  // 無制限プランの場合は常にtrue
-  if (userPlan.planId === SubscriptionPlan.UNLIMITED) {
-    return true;
+    if (currentDate <= promotionEndDate) {
+      return true; // プロモーション期間中は常に true を返す
+    }
+
+    const userPlan = await getUserPlan(userId);
+    const planDetails = PLAN_DETAILS[userPlan.planId];
+
+    // 無制限プランの場合は常に true
+    if (userPlan.planId === SubscriptionPlan.UNLIMITED) {
+      return true;
+    }
+
+    // 現在の使用量 + 新しいファイルサイズが制限を超えていないかチェック
+    const totalSize = userPlan.storageUsed + fileSize;
+    return totalSize <= planDetails.storageLimit;
+  } catch (error) {
+    console.error("ストレージ制限チェックエラー:", error);
+    return false;
   }
-
-  // それ以外のプランでは、現在の使用量+ファイルサイズが制限以下かチェック
-  const planDetails = PLAN_DETAILS[userPlan.planId];
-  return userPlan.storageUsed + fileSize <= planDetails.storageLimit;
-}
+};
 
 // サブスクリプション開始処理のためのチェックアウトセッション作成
 export async function createCheckoutSession(

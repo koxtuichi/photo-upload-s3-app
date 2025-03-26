@@ -37,6 +37,20 @@ export default function RootLayout({
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
         />
+        <script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-GEP4VS27WC"
+        ></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-GEP4VS27WC');
+            `,
+          }}
+        />
       </head>
       <body className={inter.className}>
         <AuthProvider>
