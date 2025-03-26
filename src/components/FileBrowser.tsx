@@ -29,9 +29,17 @@ const MAX_CACHE_SIZE = 100;
 
 interface FileBrowserProps {
   userId: string;
+  enableSelect?: boolean;
+  onFileSelect?: (file: FileInfo) => void;
+  initialPath?: string;
 }
 
-const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
+const FileBrowser: React.FC<FileBrowserProps> = ({
+  userId,
+  enableSelect = false,
+  onFileSelect,
+  initialPath,
+}) => {
   const [directories, setDirectories] = useState<DirectoryItem[]>([]);
   const [currentPath, setCurrentPath] = useState<string>("");
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -39,9 +47,6 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
   const [selectedFiles, setSelectedFiles] = useState<FileInfo[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [downloadProgress, setDownloadProgress] = useState<string>("");
-  const [downloadPercentage, setDownloadPercentage] = useState(0);
   // ストレージ使用量の状態
   const [storageUsage, setStorageUsage] = useState<{
     used: number;
@@ -813,7 +818,7 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
     }
   };
 
-  // 日時からファイル名を生成する関数
+  // 指定した日時を含んだファイル名を生成
   const getTimestampFileName = (): string => {
     const now = new Date();
     const year = now.getFullYear();
@@ -823,158 +828,7 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
     const minutes = String(now.getMinutes()).padStart(2, "0");
     const seconds = String(now.getSeconds()).padStart(2, "0");
 
-    return `photos_${year}${month}${day}_${hours}${minutes}${seconds}`;
-  };
-
-  // 選択されたファイルのダウンロード
-  const handleSelectedFilesDownload = async () => {
-    if (selectedFiles.length === 0) return;
-
-    setIsDownloading(true);
-    setDownloadProgress("準備中...");
-    setDownloadPercentage(0);
-
-    try {
-      // 単一ファイルの場合
-      if (selectedFiles.length === 1) {
-        setDownloadProgress("ファイルをダウンロード中...");
-        setDownloadPercentage(10); // 開始時10%から
-        await handleFileDownload(selectedFiles[0]);
-        setDownloadPercentage(100); // 完了時100%
-      }
-      // 複数ファイルの場合は並列ダウンロードを使用
-      else {
-        setDownloadProgress(
-          `複数のファイルをダウンロード中... (0/${selectedFiles.length})`
-        );
-        setDownloadPercentage(5); // 開始時5%から
-
-        // ファイルキーの配列を作成
-        const keys = selectedFiles.map((file) => file.key);
-
-        // 日時を元にしたZIPファイル名を生成
-        const zipFileName = getTimestampFileName();
-
-        // 進捗状況を追跡するためのコールバック関数
-        const onProgress = (completed: number, total: number) => {
-          const percentage = Math.round((completed / total) * 90) + 5; // 5%〜95%
-          setDownloadPercentage(percentage);
-          setDownloadProgress(
-            `複数のファイルをダウンロード中... (${completed}/${total})`
-          );
-        };
-
-        // 並列ダウンロード実行（進捗状況コールバック付き）
-        const blob = await S3ClientAPI.downloadMultipleFiles(
-          keys,
-          zipFileName,
-          onProgress
-        );
-
-        setDownloadPercentage(95); // ZIPファイル生成完了
-        setDownloadProgress("ダウンロードを開始しています...");
-
-        // ダウンロードリンクの作成
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${zipFileName}.zip`;
-        document.body.appendChild(a);
-        a.click();
-
-        // クリーンアップ
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-
-        setDownloadPercentage(100); // 完了
-        setDownloadProgress("ダウンロード完了");
-      }
-    } catch (err) {
-      console.error("ファイルダウンロードエラー:", err);
-      setError("ファイルのダウンロード中にエラーが発生しました。");
-    } finally {
-      // 1秒後に完了表示を消す（UIのフィードバックのため）
-      setTimeout(() => {
-        setIsDownloading(false);
-        setDownloadProgress("");
-        setDownloadPercentage(0);
-      }, 1000);
-    }
-  };
-
-  // ファイルのダウンロード
-  const handleFileDownload = async (fileOrKey: FileInfo | string) => {
-    try {
-      // fileOrKeyが文字列（キー）の場合の処理
-      let fileKey: string;
-
-      if (typeof fileOrKey === "string") {
-        fileKey = fileOrKey;
-      } else if (fileOrKey && fileOrKey.key) {
-        // FileInfoオブジェクトの場合
-        fileKey = fileOrKey.key;
-      } else {
-        console.error("ダウンロード対象のファイル情報が無効です");
-        setError("ファイル情報が無効です。");
-        return;
-      }
-
-      const url = await S3ClientAPI.getSignedImageUrl(fileKey);
-
-      if (!url || url === "/file.svg") {
-        console.error("ダウンロードURLの取得に失敗しました");
-        setError("ファイルのダウンロードURLを取得できませんでした。");
-        return;
-      }
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileKey.split("/").pop() || "download";
-      a.target = "_blank"; // 新しいタブで開く
-      document.body.appendChild(a);
-      a.click();
-
-      // 少し待ってからDOM要素を削除
-      setTimeout(() => {
-        document.body.removeChild(a);
-      }, 100);
-    } catch (error) {
-      console.error("ファイルのダウンロードエラー:", error);
-      setError("ファイルのダウンロード中にエラーが発生しました。");
-    }
-  };
-
-  // ディレクトリのダウンロード
-  const handleDirectoryDownload = async (path: string) => {
-    try {
-      setIsDownloading(true);
-      setDownloadProgress("ディレクトリをダウンロード中...");
-
-      const blob = await S3ClientAPI.downloadDirectory(path);
-
-      // ディレクトリ名と日時を組み合わせたファイル名を生成
-      const pathParts = path.split("/");
-      const dirType = pathParts[pathParts.length - 2] || "directory";
-      const zipFileName = `${dirType}_${getTimestampFileName()}`;
-
-      // ダウンロードリンクの作成
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${zipFileName}.zip`;
-      document.body.appendChild(a);
-      a.click();
-
-      // クリーンアップ
-      URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error("ディレクトリダウンロードエラー:", err);
-      setError("ディレクトリのダウンロード中にエラーが発生しました。");
-    } finally {
-      setIsDownloading(false);
-      setDownloadProgress("");
-    }
+    return `${year}${month}${day}_${hours}${minutes}${seconds}`;
   };
 
   // ファイルサイズのフォーマット
@@ -1286,6 +1140,25 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
     }
   };
 
+  // ファイルの復元リクエスト処理
+  const handleRequestRestore = async (key: string) => {
+    try {
+      console.log(`ファイル復元リクエスト: ${key}`);
+      // 既に復元リクエスト処理は FileCard 内で完了しているため、ここでの追加処理は不要
+      // UI更新のために状態を更新
+      setFiles((prevFiles) =>
+        prevFiles.map((file) =>
+          file.key === key
+            ? { ...file, restoreStatus: "IN_PROGRESS" as const }
+            : file
+        )
+      );
+    } catch (error) {
+      console.error("復元リクエストエラー:", error);
+      showToast("エラー", `復元リクエストに失敗しました: ${error}`, "error");
+    }
+  };
+
   return (
     <div className="h-full flex flex-col md:flex-row">
       {/* 左側のサイドバー（ファイル階層） */}
@@ -1500,87 +1373,6 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
             </div>
           ) : (
             <>
-              <div className="flex justify-between mb-2">
-                <div className="flex space-x-2">
-                  {selectedFiles.length > 0 && (
-                    <>
-                      <button
-                        className="text-sm px-4 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-full shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center"
-                        onClick={handleSelectedFilesDownload}
-                        disabled={isDownloading}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                          />
-                        </svg>
-                        {isDownloading
-                          ? "ダウンロード中..."
-                          : "まとめてダウンロード"}
-                      </button>
-                      <button
-                        className="text-sm px-4 py-1.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center"
-                        onClick={() => setSelectedFiles([])}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                        選択解除
-                      </button>
-                    </>
-                  )}
-                </div>
-                <button
-                  className="text-sm px-4 py-1.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-full shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center"
-                  onClick={() => {
-                    // すべてのファイルを選択
-                    const allFiles = files.map((file) => ({ ...file }));
-                    setSelectedFiles(allFiles);
-                  }}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4 mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 5h16a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 11h.01M12 11h.01M16 11h.01"
-                    />
-                  </svg>
-                  すべて選択
-                </button>
-              </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {files.map((file) => (
                   <FileCard
@@ -1589,10 +1381,10 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
                     onClick={handleFileClick}
                     selectedFiles={selectedFiles}
                     onSelect={toggleFileSelection}
-                    showCheckbox={true}
+                    showCheckbox={enableSelect}
                     onDoubleClick={handleFileClick}
                     onDelete={handleFileDelete}
-                    onDownload={handleFileDownload}
+                    onRequestRestore={handleRequestRestore}
                   />
                 ))}
               </div>
@@ -1609,13 +1401,6 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
           </div>
         )}
 
-        {/* ダウンロード進捗表示 */}
-        {isDownloading && (
-          <div className="fixed bottom-0 left-0 right-0 bg-blue-500 text-white p-2 text-center">
-            {downloadProgress}
-          </div>
-        )}
-
         {/* 写真プレビューモーダル */}
         {isPreviewOpen && selectedFile && (
           <PhotoModal
@@ -1623,37 +1408,6 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ userId }) => {
             url={selectedFile.url}
             onClose={handlePreviewClose}
           />
-        )}
-
-        {/* ダウンロード中のオーバーレイとプログレスバー */}
-        {isDownloading && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex flex-col items-center justify-center">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold mb-4 text-center dark:text-white">
-                ダウンロード処理中
-              </h3>
-
-              <div className="mb-2 flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-300">
-                  {downloadProgress}
-                </span>
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                  {downloadPercentage}%
-                </span>
-              </div>
-
-              <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-4">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-300"
-                  style={{ width: `${downloadPercentage}%` }}
-                ></div>
-              </div>
-
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                ダウンロードが完了するまでお待ちください。
-              </p>
-            </div>
-          </div>
         )}
       </div>
     </div>

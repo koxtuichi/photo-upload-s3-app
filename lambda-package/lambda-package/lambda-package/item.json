@@ -1,0 +1,4 @@
+{
+  "userId": {"S": "test-user-id"}, 
+  "email": {"S": "your-email@example.com"}
+}

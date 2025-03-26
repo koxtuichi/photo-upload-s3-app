@@ -5,9 +5,14 @@ import ExifReader from "exifreader";
 import PhotoModal from "./PhotoModal";
 import { processRawForDisplay } from "@/lib/rawDecoder";
 import { useInView } from "react-intersection-observer";
-import { FolderIcon, DocumentIcon } from "@heroicons/react/24/outline";
+import {
+  FolderIcon,
+  DocumentIcon,
+  ArrowDownTrayIcon,
+} from "@heroicons/react/24/outline";
 import prettyBytes from "pretty-bytes";
 import { format } from "date-fns";
+import { requestObjectRestore } from "@/lib/s3";
 
 export interface FileInfo {
   key: string;
@@ -19,6 +24,8 @@ export interface FileInfo {
   isDirectory?: boolean;
   isSelected?: boolean;
   isLoading?: boolean;
+  storageClass?: string;
+  restoreStatus?: "IN_PROGRESS" | "COMPLETED" | "NOT_RESTORED";
 }
 
 interface FileCardProps {
@@ -30,7 +37,7 @@ interface FileCardProps {
   onDoubleClick?: (file: FileInfo) => void;
   onDelete?: (key: string) => void;
   onOpenModal?: (url: string) => void;
-  onDownload?: (key: string) => void;
+  onRequestRestore?: (key: string) => void;
 }
 
 // RAWファイル拡張子のリスト
@@ -546,6 +553,12 @@ const isVideoFile = (ext: string): boolean => {
   ].includes(ext.toLowerCase());
 };
 
+// ファイルパスから拡張子を取得する関数
+const getFileExtension = (filePath: string): string => {
+  const parts = filePath.split(".");
+  return parts.length > 1 ? `.${parts[parts.length - 1].toLowerCase()}` : "";
+};
+
 const isRawFile = (ext: string): boolean => {
   return [
     ".raw",
@@ -606,7 +619,7 @@ const FileCard: React.FC<FileCardProps> = ({
   onDoubleClick,
   onDelete,
   onOpenModal,
-  onDownload,
+  onRequestRestore,
 }) => {
   // 状態管理
   const [imgSrc, setImgSrc] = useState<string>("");
@@ -616,6 +629,9 @@ const FileCard: React.FC<FileCardProps> = ({
   const [showPlaceholder, setShowPlaceholder] = useState(true);
   const isSelected = selectedFiles.some((f) => f.key === file.key);
   const cardRef = useRef<HTMLDivElement>(null);
+  const [restoreStatus, setRestoreStatus] = useState<
+    "IN_PROGRESS" | "COMPLETED" | "NOT_RESTORED" | undefined
+  >(file.restoreStatus);
 
   // Intersection Observerを使用して可視性を監視
   const { ref: inViewRef, inView } = useInView({
@@ -635,21 +651,12 @@ const FileCard: React.FC<FileCardProps> = ({
     [inViewRef]
   );
 
-  // ファイル名から拡張子を取得
-  const getFileExtension = (filename: string): string => {
-    return "." + filename.split(".").pop()?.toLowerCase() || "";
-  };
-
-  // 拡張子からファイルタイプを判断
-  const fileExtension = getFileExtension(file.key || "");
-
   // 表示する画像/サムネイルのURLを取得
   const getFileUrl = async () => {
     if (!file.key) return;
 
     console.log(`getFileUrl開始: ${file.key}`);
     setProcessing(true);
-    setImgError(false);
 
     try {
       const fileExtension =
@@ -676,7 +683,7 @@ const FileCard: React.FC<FileCardProps> = ({
           const url = await S3ClientAPI.getSignedImageUrl(file.key);
           console.log(`通常の署名付きURL: ${url}`);
           setImgSrc(url || "");
-          setShowPlaceholder(!url);
+          setShowPlaceholder(false);
         }
       } else if (isImageFile(fileExtension) || isVideoFile(fileExtension)) {
         console.log(`通常の画像/動画ファイル処理: ${file.key}`);
@@ -686,12 +693,12 @@ const FileCard: React.FC<FileCardProps> = ({
       } else {
         console.log(`その他のファイル: ${file.key}`);
         setImgSrc("");
-        setShowPlaceholder(true);
+        setShowPlaceholder(false);
       }
     } catch (error) {
       console.error("ファイル処理エラー:", error);
-      setImgError(true);
-      setShowPlaceholder(true);
+      setImgSrc("");
+      setShowPlaceholder(false);
     } finally {
       setProcessing(false);
       console.log(
@@ -700,7 +707,10 @@ const FileCard: React.FC<FileCardProps> = ({
     }
   };
 
-  const handleDelete = async () => {
+  // 削除処理
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // イベント伝播を止める
+
     if (!file.key || !onDelete) return;
 
     try {
@@ -800,31 +810,12 @@ const FileCard: React.FC<FileCardProps> = ({
     }
   };
 
-  const handleDownload = async () => {
-    if (!file.key || !onDownload) return;
-
-    try {
-      console.log(`ファイルダウンロード開始: ${file.key}`);
-      // コールバック関数を呼び出し（FileBrowser側でダウンロード処理を実行）
-      onDownload(file.key);
-    } catch (error) {
-      console.error("ファイルダウンロードエラー:", error);
-      alert("ファイルのダウンロードに失敗しました。もう一度お試しください。");
-    }
-  };
-
   // 可視領域に入った時にロード
   useEffect(() => {
-    if (inView && !loaded) {
+    if (inView && !imgSrc && showPlaceholder) {
       getFileUrl();
-      setLoaded(true);
     }
-
-    // 可視領域から外れた時にリソースを解放
-    if (!inView && loaded && imgSrc && imgSrc.startsWith("blob:")) {
-      URL.revokeObjectURL(imgSrc);
-    }
-  }, [inView, file.key, loaded]);
+  }, [inView, file.key, imgSrc, showPlaceholder]);
 
   // コンポーネントがアンマウントされる時にリソースを解放
   useEffect(() => {
@@ -855,17 +846,101 @@ const FileCard: React.FC<FileCardProps> = ({
     if (onSelect) onSelect(file);
   };
 
+  // 復元リクエストの処理
+  const handleRequestRestore = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    console.log(`復元リクエスト開始: ${file.key}`);
+
+    try {
+      setProcessing(true);
+      console.log(`S3への復元リクエスト送信: ${file.key}`);
+
+      const result = await requestObjectRestore(file.key);
+      console.log(`復元リクエスト結果: ${result.success ? "成功" : "失敗"}`);
+
+      if (result.success) {
+        setRestoreStatus("IN_PROGRESS");
+        alert(
+          "復元リクエストを送信しました。復元完了までしばらくお待ちください。復元が完了しましたらお客様のメールアドレスへダウンロード可能なURLをお送りいたします"
+        );
+
+        if (onRequestRestore) {
+          onRequestRestore(file.key);
+        }
+      } else if (result.alreadyInProgress) {
+        alert(
+          "復元中です。復元完了しましたらダウンロードURLをお客様のメールアドレスに送信させていただきますので、今しばらくお待ちください。"
+        );
+      } else {
+        alert("復元リクエストに失敗しました。");
+      }
+    } catch (error) {
+      console.error("復元リクエストエラー:", error);
+      alert("復元リクエストに失敗しました。");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // ファイルアクションボタンの部分
+  const renderFileActions = () => {
+    if (file.isDirectory) return null;
+
+    return (
+      <div className="absolute bottom-0 right-0 p-1 bg-opacity-75 bg-gray-800 rounded-tl-md">
+        <div className="flex space-x-1">
+          {/* 復元リクエストボタン */}
+          {onRequestRestore && (
+            <button
+              onClick={handleRequestRestore}
+              className="p-1 rounded-full text-white hover:bg-gray-700"
+              title="アーカイブから復元"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* 既存の削除ボタン */}
+          {onDelete && (
+            <button
+              onClick={handleDelete}
+              className="p-1 text-white rounded-full hover:bg-gray-700"
+              title="削除"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       ref={setRefs}
       className={`relative ${
         isSelected ? "ring-2 ring-blue-500" : ""
-      } border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200 border-gray-200 dark:border-gray-700`}
+      } group rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 transition-shadow hover:shadow-lg bg-white dark:bg-gray-800`}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
     >
+      {/* チェックボックス（選択用） */}
       {showCheckbox && (
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute top-1 left-1 z-10">
           <input
             type="checkbox"
             checked={isSelected}
@@ -875,22 +950,16 @@ const FileCard: React.FC<FileCardProps> = ({
           />
         </div>
       )}
+
+      {/* ファイルサムネイル */}
       <div className="aspect-square relative bg-gray-50 dark:bg-gray-800">
         {showPlaceholder ? (
           <div className="w-full h-full flex items-center justify-center">
-            <svg
-              className="w-12 h-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
+            {file.isDirectory ? (
+              <FolderIcon className="h-16 w-16 text-gray-400" />
+            ) : (
+              <DocumentIcon className="h-16 w-16 text-gray-400" />
+            )}
           </div>
         ) : (
           <img
@@ -912,67 +981,18 @@ const FileCard: React.FC<FileCardProps> = ({
             }}
           />
         )}
+
+        {/* ファイルアクションボタン */}
+        {renderFileActions()}
       </div>
-      <div className="p-2 text-center">
-        <p className="text-xs font-medium truncate text-gray-700 dark:text-gray-300">
-          {file.key.split("/").pop()}
-        </p>
-        {file.size && (
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {(file.size / (1024 * 1024)).toFixed(1)} MB
-          </p>
-        )}
-      </div>
-      {isSelected && (
-        <div className="absolute bottom-2 right-2 flex space-x-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation(); // イベント伝播を停止
-              handleDelete();
-            }}
-            className="flex items-center justify-center p-1.5 bg-white rounded-full shadow-md text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 transform hover:-translate-y-0.5"
-            title="削除"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation(); // イベント伝播を停止
-              handleDownload();
-            }}
-            className="flex items-center justify-center p-1.5 bg-white rounded-full shadow-md text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200 transform hover:-translate-y-0.5"
-            title="ダウンロード"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-              />
-            </svg>
-          </button>
+
+      {/* ファイルメタデータ表示 */}
+      <div className="p-2 text-xs text-gray-600 dark:text-gray-300">
+        <div className="truncate">{file.key.split("/").pop()}</div>
+        <div className="flex justify-between items-center">
+          <span>{prettyBytes(file.size)}</span>
         </div>
-      )}
+      </div>
     </div>
   );
 };

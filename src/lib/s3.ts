@@ -5,6 +5,7 @@ import {
   ListObjectsV2Command,
   DeleteObjectCommand,
   HeadObjectCommand,
+  RestoreObjectCommand,
 } from "@aws-sdk/client-s3";
 import { S3RequestPresigner } from "@aws-sdk/s3-request-presigner";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
@@ -428,44 +429,94 @@ export const uploadFile = async (
 };
 
 /**
- * 画像の署名付きURLを取得する
+ * S3オブジェクトの署名付きURLを取得する
+ * @param key S3のオブジェクトキー
+ * @returns 署名付きURL
  */
 export const getSignedImageUrl = async (key: string): Promise<string> => {
-  try {
-    // keyが無効な場合は早期リターン
-    if (!key || typeof key !== "string") {
-      console.error("無効なキーが指定されました:", key);
-      return "/file.svg"; // フォールバックイメージ
-    }
-
-    // S3クライアントと認証情報が有効か確認
-    if (!s3Client || !BUCKET_NAME) {
-      console.error("S3クライアントまたはバケット名が設定されていません");
-      return "/file.svg"; // フォールバックイメージ
-    }
-
-    // URLディレクトリトラバーサル対策
-    const sanitizedKey = key.replace(/\.\.\//g, "");
-
-    // GetObjectCommandの設定オプション
-    const commandOptions = {
-      Bucket: BUCKET_NAME,
-      Key: sanitizedKey,
-    };
-
-    // 署名付きURLを生成 (有効期限を短めに設定)
-    const signedUrl = await getSignedUrl(
-      s3Client,
-      new GetObjectCommand(commandOptions),
-      {
-        expiresIn: 3600, // 1時間
-      }
+  if (!accessKeyId || !secretAccessKey) {
+    console.error(
+      "AWS認証情報が設定されていません。環境変数を確認してください。"
     );
+    return "";
+  }
+
+  try {
+    // まずオブジェクトのストレージクラスを確認
+    const headObjectCommand = new HeadObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+    });
+
+    let headObjectResponse;
+    try {
+      headObjectResponse = await s3Client.send(headObjectCommand);
+    } catch (headError) {
+      console.error(`オブジェクトメタデータ取得エラー: ${key}`, headError);
+      throw headError;
+    }
+
+    // デバッグ用にレスポンスの内容をログ出力
+    console.log(
+      "S3 HeadObject レスポンス:",
+      JSON.stringify(headObjectResponse, null, 2)
+    );
+    console.log("Restore 状態:", headObjectResponse.Restore);
+
+    // StorageClassが存在しない場合はDEEP_ARCHIVEとして扱う
+    const actualStorageClass =
+      headObjectResponse.StorageClass || "DEEP_ARCHIVE";
+
+    // アーカイブクラスでない場合は常に利用可能
+    // Glacier Deep ArchiveまたはGlacierの場合のみ復元が必要
+    if (
+      actualStorageClass !== "DEEP_ARCHIVE" &&
+      actualStorageClass !== "GLACIER"
+    ) {
+      console.log(
+        `オブジェクト ${key} は既に利用可能です（ストレージクラス: ${actualStorageClass}）`
+      );
+
+      // 署名付きURLを生成して返す（booleanではなく）
+      const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      });
+
+      const signedUrl = await getSignedUrl(s3Client, command, {
+        expiresIn: 3600, // 1時間
+      });
+
+      return signedUrl;
+    }
+
+    // 署名付きURLを生成
+    const command = new GetObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+    });
+
+    const signedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: 3600, // 1時間
+    });
 
     return signedUrl;
-  } catch (error) {
-    console.error(`署名付きURL生成エラー (${key}):`, error);
-    return "/file.svg"; // エラー時のフォールバック
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      if (error.message === "DEEP_ARCHIVE_RESTORE_REQUESTED") {
+        // 復元リクエスト送信済み
+        return "/restore_requested.svg";
+      } else if (error.message === "DEEP_ARCHIVE_RESTORE_IN_PROGRESS") {
+        // 復元中
+        return "/restore_in_progress.svg";
+      } else if (error.message === "DEEP_ARCHIVE_RESTORE_FAILED") {
+        // 復元リクエスト失敗
+        return "/restore_failed.svg";
+      }
+    }
+
+    console.error("署名付きURL取得エラー:", error);
+    return "/file.svg"; // エラー時のデフォルトアイコン
   }
 };
 
@@ -770,6 +821,142 @@ const getRawThumbnailUrl = async (filePath: string): Promise<string> => {
     return "/file.svg";
   }
 };
+
+/**
+ * S3 Glacier Deep Archiveからオブジェクトを復元するリクエストを送信する
+ * @param key 復元するオブジェクトのキー
+ * @param days 復元後にオブジェクトを利用可能な日数
+ * @returns 復元リクエスト送信結果
+ */
+export async function requestObjectRestore(
+  key: string,
+  days: number = 7
+): Promise<{ success: boolean; alreadyInProgress?: boolean }> {
+  if (!accessKeyId || !secretAccessKey) {
+    console.error(
+      "AWS認証情報が設定されていません。環境変数を確認してください。"
+    );
+    return { success: false };
+  }
+
+  try {
+    // オブジェクトの現在のストレージクラスを確認
+    const headObjectCommand = new HeadObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+    });
+
+    const headObjectResponse = await s3Client.send(headObjectCommand);
+    const actualStorageClass =
+      headObjectResponse.StorageClass || "DEEP_ARCHIVE";
+
+    // アーカイブクラスでない場合は常に利用可能
+    // Glacier Deep ArchiveまたはGlacierの場合のみ復元が必要
+    if (
+      actualStorageClass !== "DEEP_ARCHIVE" &&
+      actualStorageClass !== "GLACIER"
+    ) {
+      console.log(
+        `オブジェクト ${key} は既に利用可能です（ストレージクラス: ${
+          actualStorageClass || "不明"
+        }）`
+      );
+      return { success: true };
+    }
+
+    // アーカイブされているオブジェクトの場合、復元リクエストを送信
+    const restoreCommand = new RestoreObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      RestoreRequest: {
+        Days: days,
+        GlacierJobParameters: {
+          Tier: "Standard", // 'Expedited'、'Standard'、'Bulk' のいずれか
+        },
+      },
+    });
+
+    await s3Client.send(restoreCommand);
+    console.log(
+      `オブジェクト ${key} の復元リクエストを送信しました。復元には数時間かかる場合があります。`
+    );
+    return { success: true };
+  } catch (error) {
+    console.error("オブジェクト復元リクエストエラー:", error);
+
+    // RestoreAlreadyInProgressエラーの場合は特別に処理
+    if (
+      error instanceof Error &&
+      (error.name === "RestoreAlreadyInProgress" ||
+        error.message.includes("RestoreAlreadyInProgress") ||
+        error.message.includes("Object restore is already in progress"))
+    ) {
+      console.log("オブジェクトは既に復元中です");
+      return { success: false, alreadyInProgress: true };
+    }
+
+    return { success: false };
+  }
+}
+
+/**
+ * オブジェクトの復元状態を確認する
+ * @param key 確認するオブジェクトのキー
+ * @returns 復元状態（進行中、完了、復元されていない）
+ */
+export async function checkRestoreStatus(
+  key: string
+): Promise<"IN_PROGRESS" | "COMPLETED" | "NOT_RESTORED"> {
+  if (!accessKeyId || !secretAccessKey) {
+    console.error(
+      "AWS認証情報が設定されていません。環境変数を確認してください。"
+    );
+    return "NOT_RESTORED";
+  }
+
+  try {
+    const headObjectCommand = new HeadObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+    });
+
+    const headObjectResponse = await s3Client.send(headObjectCommand);
+
+    // デバッグ用にレスポンスの内容をログ出力
+    console.log(
+      "S3 HeadObject レスポンス:",
+      JSON.stringify(headObjectResponse, null, 2)
+    );
+    console.log("Restore 状態:", headObjectResponse.Restore);
+    console.log("StorageClass:", headObjectResponse.StorageClass);
+
+    // アーカイブクラスでない場合は常に利用可能
+    // Glacier Deep ArchiveまたはGlacierの場合のみ復元が必要
+    if (
+      headObjectResponse.StorageClass !== "DEEP_ARCHIVE" &&
+      headObjectResponse.StorageClass !== "GLACIER"
+    ) {
+      return "COMPLETED";
+    }
+
+    // RestoreStatue が設定されていない場合は復元されていない
+    if (!headObjectResponse.Restore) {
+      return "NOT_RESTORED";
+    }
+
+    // 復元状態をチェック
+    if (headObjectResponse.Restore.includes('ongoing-request="true"')) {
+      return "IN_PROGRESS";
+    } else if (headObjectResponse.Restore.includes('ongoing-request="false"')) {
+      return "COMPLETED";
+    }
+
+    return "NOT_RESTORED";
+  } catch (error) {
+    console.error("復元状態確認エラー:", error);
+    return "NOT_RESTORED";
+  }
+}
 
 // S3のAPIs
 export const S3ClientAPI = {

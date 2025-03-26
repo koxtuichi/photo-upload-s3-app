@@ -5,7 +5,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  output: "export", // 静的HTMLとJSファイルを出力
+  // output: "export", // 静的HTMLとJSファイルを出力
   distDir: "out", // 出力先ディレクトリ
   trailingSlash: true, // 末尾のスラッシュを追加（静的ビルドのためのパス解決改善）
   images: {
